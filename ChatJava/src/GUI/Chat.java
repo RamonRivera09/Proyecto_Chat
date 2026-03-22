@@ -1,5 +1,10 @@
 package GUI;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.Socket;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
@@ -25,6 +30,10 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
 public class Chat extends JFrame {
+    // --- Variables de Red ---
+    private Socket socket;
+    private BufferedReader entrada; // Para escuchar al servidor
+    private PrintWriter salida;     // Para enviarle mensajes al servidor
     private CardLayout cardLayout;
     private JPanel pContenedor, pantallaInicial, Separador, pChat, pChatInput, cabeceraChat, pMensajes;
     private JLabel MiPerfil, Titulo, Contactos;
@@ -41,11 +50,12 @@ public class Chat extends JFrame {
     public Chat(){
         configFrame();
         initComponents();
+        conectarAlServidor();
         setVisible(true);
     }
     
     public void configFrame(){
-        setSize(new Dimension(1000, 900));
+        setSize(new Dimension(1000, 700));
         setLocationRelativeTo(null);
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -56,24 +66,24 @@ public class Chat extends JFrame {
     }
     
     public void initComponents(){
-        JPanel pantallaInicial = new JPanel(new BorderLayout());
+        pantallaInicial = new JPanel(new BorderLayout());
         
         // Cabecera superior
-        JPanel Separador=new JPanel(new BorderLayout());
+        Separador=new JPanel(new BorderLayout());
         Separador.setPreferredSize(new Dimension(1000, 70));
         Separador.setBackground(new Color(200, 162, 200)); 
         
-        JLabel Titulo = new JLabel("  WhatsChafa");
+        Titulo = new JLabel("  WhatsChafa");
         Titulo.setFont(new Font("Arial", Font.BOLD, 22));
         Titulo.setForeground(Color.WHITE);
         Separador.add(Titulo, BorderLayout.WEST);
         
-        JLabel MiPerfil = new JLabel("Mi Perfil \u2630   ");
+        MiPerfil = new JLabel("Mi Perfil \u2630   ");
         MiPerfil.setFont(new Font("Arial", Font.BOLD, 25));
         MiPerfil.setForeground(Color.WHITE);
         Separador.add(MiPerfil, BorderLayout.EAST);
         
-        JPopupMenu Opciones = new JPopupMenu();
+        Opciones = new JPopupMenu();
         Opciones.add(new JMenuItem("Nuevo grupo"));
         Opciones.add(new JMenuItem("Ajustes"));
         Opciones.addSeparator();
@@ -95,22 +105,22 @@ public class Chat extends JFrame {
         listaContactos.setFont(new Font("Arial", Font.PLAIN, 24));
         listaContactos.setFixedCellHeight(80);
 
-        JScrollPane scrollContactos = new JScrollPane(listaContactos);
+        scrollContactos = new JScrollPane(listaContactos);
         pantallaInicial.add(scrollContactos, BorderLayout.CENTER);
         
         
         // Segunda pantalla para el chat
-        JPanel pChat = new JPanel(new BorderLayout());
+        pChat = new JPanel(new BorderLayout());
         
-        JPanel cabeceraChat = new JPanel(new BorderLayout());
+        cabeceraChat = new JPanel(new BorderLayout());
         cabeceraChat.setPreferredSize(new Dimension(1000, 70));
         cabeceraChat.setBackground(new Color(200, 162, 200));
         
-        JButton Volver = new JButton("<- Volver");
+        Volver = new JButton("<- Volver");
         Volver.setFont(new Font("Arial", Font.BOLD, 14));
         cabeceraChat.add(Volver, BorderLayout.WEST);
         
-        JLabel Contactos = new JLabel("Nombre del Contacto", JLabel.CENTER);
+        Contactos = new JLabel("Nombre del Contacto", JLabel.CENTER);
         Contactos.setFont(new Font("Arial", Font.BOLD, 22));
         cabeceraChat.add(Contactos, BorderLayout.CENTER);
 
@@ -131,13 +141,13 @@ public class Chat extends JFrame {
         this.pMensajes = pMessages;
         
         // Barra para escribir
-        JPanel pChatInput = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 15));
+        pChatInput = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 15));
         pChatInput.setPreferredSize(new Dimension(1000, 80));
         pChatInput.setBackground(new Color(240, 242, 245));
         
         JTextField Mensaje = new JTextField(30);
         Mensaje.setFont(new Font("Arial", Font.PLAIN, 18));
-        JButton Enviar = new JButton("Enviar");
+        Enviar = new JButton("Enviar");
 
         
         JButton Zumbido = new JButton("Zumbido");
@@ -201,6 +211,32 @@ public class Chat extends JFrame {
         cardLayout.show(pContenedor, "LISTA");
     }
     
+    public void conectarAlServidor() {
+        try {
+            // 1. Nos conectamos al "puerto" de tu computadora (localhost) donde vive el Servidor
+            socket = new Socket("localhost", 9090);
+            entrada = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            salida = new PrintWriter(socket.getOutputStream(), true);
+
+            // 2. Creamos un Hilo (Thread) que estará siempre escuchando si llega un mensaje
+            Thread hiloEscucha = new Thread(() -> {
+                String mensajeRecibido;
+                try {
+                    // Mientras el servidor nos siga mandando cosas...
+                    while ((mensajeRecibido = entrada.readLine()) != null) {
+                        // ... mandamos ese texto a tu método para dibujar la burbuja izquierda
+                        recibirMensaje(mensajeRecibido);
+                    }
+                } catch (IOException ex) {
+                    System.out.println("Desconectado del servidor.");
+                }
+            });
+            hiloEscucha.start(); // Arrancamos la oreja virtual
+
+        } catch (IOException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this, "No se pudo conectar al servidor. ¿Está encendido?", "Error de red", javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
+    }
     // MENSAJE DERECHA
     public void enviarMensaje(JTextField Mensaje){
         String texto = Mensaje.getText();
@@ -235,8 +271,10 @@ public class Chat extends JFrame {
 
             Mensaje.setText("");
 
-            // SOCKET
-            // out.println(texto);
+            // SOCKET: Enviamos el texto al servidor
+            if (salida != null) {
+                salida.println(texto);
+            }
         }
     }
     
