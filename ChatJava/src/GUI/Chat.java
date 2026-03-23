@@ -84,7 +84,7 @@ public class Chat extends JFrame {
         Separador.add(MiPerfil, BorderLayout.EAST);
         
         Opciones = new JPopupMenu();
-        Opciones.add(new JMenuItem("Nuevo grupo"));
+        Opciones.add(new JMenuItem("Contacto"));
         Opciones.add(new JMenuItem("Ajustes"));
         Opciones.addSeparator();
         Opciones.add(new JMenuItem("Cerrar sesión"));
