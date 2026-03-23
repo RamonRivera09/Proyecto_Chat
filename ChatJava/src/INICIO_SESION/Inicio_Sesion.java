@@ -141,6 +141,8 @@ public class Inicio_Sesion extends JFrame implements ActionListener {
                         // AQUÍ ABRIREMOS LA VENTANA DEL CHAT PRÓXIMAMENTE
                         // new VentanaChat(nombreUsuario).setVisible(true);
                         // this.dispose();
+                        new Chat();
+                        this.dispose();
                     } else {
                         JOptionPane.showMessageDialog(this, "Usuario o contraseña incorrectos.", "Error de Autenticación", JOptionPane.ERROR_MESSAGE);
                         contra1.setText(""); // Limpiamos la contraseña
@@ -149,8 +151,8 @@ public class Inicio_Sesion extends JFrame implements ActionListener {
             } catch (SQLException ex) {
                 JOptionPane.showMessageDialog(this, "Error en la base de datos: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
-            new Chat();
-            this.dispose();
+            
+            
         }
     }
 
