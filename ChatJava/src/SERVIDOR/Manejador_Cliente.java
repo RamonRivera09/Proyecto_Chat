@@ -6,10 +6,11 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.Set;
+import java.nio.charset.StandardCharsets;
 
 // Implementamos Runnable para que funcione como un Hilo (Thread) independiente
 public class Manejador_Cliente implements Runnable {
-    
+
     private Socket socket;
     private BufferedReader entrada; // Para leer lo que envía el usuario
     private PrintWriter salida;     // Para enviarle cosas a este usuario
@@ -25,8 +26,8 @@ public class Manejador_Cliente implements Runnable {
     public void run() {
         try {
             // 1. Preparamos las herramientas para leer y escribir
-            entrada = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            salida = new PrintWriter(socket.getOutputStream(), true);
+            entrada = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            salida = new PrintWriter(new java.io.OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
 
             // 2. Agregamos a este cliente a la lista general del servidor
             // synchronized evita que dos usuarios se agreguen al mismo milisegundo y choquen
@@ -39,14 +40,16 @@ public class Manejador_Cliente implements Runnable {
             while ((mensaje = entrada.readLine()) != null) {
                 System.out.println("Servidor recibió: " + mensaje);
 
-                // 4. Repartimos el mensaje a TODOS los clientes conectados
+                // 4. Repartimos el mensaje a TODOS, menos a quien lo envió
                 synchronized (escritores) {
                     for (PrintWriter escritor : escritores) {
-                        escritor.println(mensaje);
+                        if (escritor != salida) {
+                            escritor.println(mensaje);
+                        }
                     }
                 }
             }
-            
+
         } catch (IOException e) {
             System.out.println("Un usuario se desconectó o tuvo un problema de red.");
         } finally {
