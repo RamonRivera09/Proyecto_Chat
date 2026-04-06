@@ -1,5 +1,6 @@
 package GUI;
 
+import Snake.FrameJuego;
 import INICIO_SESION.Inicio;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -105,8 +106,11 @@ public class Chat extends JFrame {
             cardLayout.show(pContenedor, "PERFIL");
         });
         Opciones.add(itemVerPerfil);
+        /*JMenuItem itemJugar=new JMenuItem("Jugar");
+        itemJugar.addActionListener(e-> { new FrameJuego();});*/
         Opciones.add(new JMenuItem("Contacto"));
         Opciones.add(new JMenuItem("Ajustes"));
+        //Opciones.add(new JMenuItem("Jugar"));
         Opciones.addSeparator();
 
         //Cerrar sesión
