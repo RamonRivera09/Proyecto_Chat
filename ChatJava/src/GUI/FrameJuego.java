@@ -1,4 +1,4 @@
-package Snake;
+package GUI;
 
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
@@ -9,7 +9,7 @@ public class FrameJuego extends JFrame{
     FrameJuego(){
             this.add(obj);
             this.setTitle("Juego de Snake");
-            this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
             this.setResizable(false);
             this.pack();
             this.setVisible(true);

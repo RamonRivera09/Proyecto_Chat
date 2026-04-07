@@ -1,6 +1,6 @@
 package GUI;
 
-import Snake.FrameJuego;
+//import Snake.FrameJuego;
 import INICIO_SESION.Inicio;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -13,6 +13,8 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import javax.swing.JButton;
@@ -33,15 +35,16 @@ import java.time.format.DateTimeFormatter;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.nio.charset.StandardCharsets;
+import javax.swing.ListModel;
 
-public class Chat extends JFrame {
+public class Chat extends JFrame implements ActionListener {
 
     // --- Variables de Red ---
     private Socket socket;
     private BufferedReader entrada; // Para escuchar al servidor
     private PrintWriter salida;     // Para enviarle mensajes al servidor
     private CardLayout cardLayout;
-    private JPanel pContenedor, pantallaInicial, Separador, pChat, pChatInput, cabeceraChat, pMensajes;
+    private JPanel pContenedor, pBuscar, pantallaInicial, Separador, pChat, pChatInput, cabeceraChat, pMensajes;
     private JLabel MiPerfil, Titulo, Contactos;
     private JPopupMenu Opciones;
     private JButton Volver, Enviar;
@@ -52,6 +55,10 @@ public class Chat extends JFrame {
     private JScrollPane scrollMensajes;
     private JComboBox<String> emojis;
     private JComboBox<String> fuentes;
+
+    private JMenuItem juego;
+    private JTextField txtBuscar;
+    private JButton btnBuscar;
 
     private String usuarioLogueado; // Variable para guardar el nombre
 
@@ -93,7 +100,7 @@ public class Chat extends JFrame {
         Titulo.setForeground(Color.WHITE);
         Separador.add(Titulo, BorderLayout.WEST);
 
-        MiPerfil = new JLabel(usuarioLogueado + " \u2630   ");
+        MiPerfil = new JLabel(usuarioLogueado + " Conectado " + " \u2630   ");
         MiPerfil.setFont(new Font("Arial", Font.BOLD, 20));
         MiPerfil.setFont(new Font("Arial", Font.BOLD, 25));
         MiPerfil.setForeground(Color.WHITE);
@@ -106,11 +113,11 @@ public class Chat extends JFrame {
             cardLayout.show(pContenedor, "PERFIL");
         });
         Opciones.add(itemVerPerfil);
-        /*JMenuItem itemJugar=new JMenuItem("Jugar");
-        itemJugar.addActionListener(e-> { new FrameJuego();});*/
+        juego = new JMenuItem("Jugar");
+        juego.addActionListener(this);
         Opciones.add(new JMenuItem("Contacto"));
         Opciones.add(new JMenuItem("Ajustes"));
-        //Opciones.add(new JMenuItem("Jugar"));
+        Opciones.add(juego);
         Opciones.addSeparator();
 
         //Cerrar sesión
@@ -148,6 +155,42 @@ public class Chat extends JFrame {
 
         scrollContactos = new JScrollPane(listaContactos);
         pantallaInicial.add(scrollContactos, BorderLayout.CENTER);
+
+        pBuscar = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+        pBuscar.setBackground(new Color(200, 162, 200));
+
+        txtBuscar = new JTextField(30); // tamaño en columnas
+        btnBuscar = new JButton("Buscar");
+        btnBuscar.addActionListener(e -> {
+            String busqueda = txtBuscar.getText().trim().toLowerCase();
+
+            if (busqueda.isEmpty()) {
+                JOptionPane.showMessageDialog(null, "Escribe un nombre");
+                return;
+            }
+
+            ListModel<String> modelo = listaContactos.getModel();
+            boolean encontrado = false;
+
+            for (int i = 0; i < modelo.getSize(); i++) {
+                String contacto = modelo.getElementAt(i).toLowerCase();
+
+                if (contacto.contains(busqueda)) {
+                    listaContactos.setSelectedIndex(i);
+                    listaContactos.ensureIndexIsVisible(i); 
+                    encontrado = true;
+                    break;
+                }
+            }
+
+            if (!encontrado) {
+                JOptionPane.showMessageDialog(null, "Contacto no registrado");
+            }
+        });
+        pBuscar.add(txtBuscar);
+        pBuscar.add(btnBuscar);
+
+        pantallaInicial.add(pBuscar, BorderLayout.SOUTH);
 
         // Segunda pantalla para el chat
         pChat = new JPanel(new BorderLayout());
@@ -383,6 +426,12 @@ public class Chat extends JFrame {
         }
     }
 
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if (e.getSource() == juego) {
+            new FrameJuego();
+        }
+    }
     /*public static void main(String[] args) {
         new Chat();
     }*/

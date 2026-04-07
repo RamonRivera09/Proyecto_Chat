@@ -4,6 +4,8 @@ import java.awt.*;
 import javax.swing.*;
 
 public class PantallaPerfil extends JPanel {
+    private JLabel lblFoto;
+    private ImageIcon perfil;
     
     public PantallaPerfil(String nombreUsuario, CardLayout cl, JPanel contenedor) {
         setLayout(new BorderLayout());
@@ -14,7 +16,7 @@ public class PantallaPerfil extends JPanel {
         cabecera.setBackground(new Color(200, 162, 200));
         
         JButton btnVolver = new JButton("<- Volver al Chat");
-        btnVolver.addActionListener(e -> cl.show(contenedor, "CHAT"));
+        btnVolver.addActionListener(e -> cl.show(contenedor, "LISTA"));
         
         cabecera.add(btnVolver);
         add(cabecera, BorderLayout.NORTH);
@@ -24,9 +26,15 @@ public class PantallaPerfil extends JPanel {
         cuerpo.setLayout(new BoxLayout(cuerpo, BoxLayout.Y_AXIS));
         cuerpo.setBorder(BorderFactory.createEmptyBorder(50, 50, 50, 50));
 
-        JLabel lblFoto = new JLabel("👤", JLabel.CENTER);
-        lblFoto.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 80));
+        perfil = new ImageIcon(getClass().getResource("/IMAGENES/nuevo_perfil.png"));
+
+        Image img = perfil.getImage();
+        Image imgEscalada = img.getScaledInstance(200, 200, Image.SCALE_SMOOTH);
+
+        lblFoto = new JLabel(new ImageIcon(imgEscalada));
+        lblFoto.setPreferredSize(new Dimension(200, 200));
         lblFoto.setAlignmentX(Component.CENTER_ALIGNMENT);
+        
 
         JLabel lblNombre = new JLabel("Usuario: " + nombreUsuario);
         lblNombre.setFont(new Font("Arial", Font.BOLD, 24));
@@ -43,4 +51,5 @@ public class PantallaPerfil extends JPanel {
 
         add(cuerpo, BorderLayout.CENTER);
     }
+    
 }

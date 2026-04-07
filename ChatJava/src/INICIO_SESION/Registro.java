@@ -1,6 +1,7 @@
 package INICIO_SESION;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -47,6 +48,7 @@ public class Registro extends JFrame implements ActionListener {
     public void initComponents() {
         // Creamos un solo panel y le asignamos GridBagLayout
         central = new JPanel();
+        central.setBackground(new Color(229, 221, 213));
         central.setLayout(new GridBagLayout());
 
         // GridBagConstraints nos permite controlar la posición y márgenes
@@ -94,6 +96,7 @@ public class Registro extends JFrame implements ActionListener {
 
         //7. Crear Panel para los botones
         sur = new JPanel();
+        sur.setBackground(new Color(200, 162, 200));
         sur.setLayout(new BorderLayout());
 
         //8. Crear botón atrás

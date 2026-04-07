@@ -1,4 +1,4 @@
-package Snake;
+package GUI;
 
 import java.awt.*;
 import java.awt.event.*;
