@@ -4,7 +4,7 @@ import java.awt.*;
 import javax.swing.*;
 
 public class PantallaPerfil extends JPanel {
-    private JLabel lblFoto;
+    private JLabel lblFoto, correo, estado, conectado;
     private ImageIcon perfil;
     
     public PantallaPerfil(String nombreUsuario, CardLayout cl, JPanel contenedor) {
@@ -23,6 +23,7 @@ public class PantallaPerfil extends JPanel {
 
         // Cuerpo del Perfil
         JPanel cuerpo = new JPanel();
+        cuerpo.setBackground(new Color(229, 221, 213));
         cuerpo.setLayout(new BoxLayout(cuerpo, BoxLayout.Y_AXIS));
         cuerpo.setBorder(BorderFactory.createEmptyBorder(50, 50, 50, 50));
 
@@ -40,14 +41,30 @@ public class PantallaPerfil extends JPanel {
         lblNombre.setFont(new Font("Arial", Font.BOLD, 24));
         lblNombre.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        String codigo = "USR-" + nombreUsuario.substring(0, Math.min(2, nombreUsuario.length())).toUpperCase() + "01";
+        String codigo = "USR-" + nombreUsuario.substring(0, Math.min(2, nombreUsuario.length())).toUpperCase() + (int)(Math.random()*(999-1)+0);
         JLabel lblCodigo = new JLabel("ID: " + codigo);
+        lblCodigo.setFont(new Font("Arial", Font.BOLD, 24));
         lblCodigo.setAlignmentX(Component.CENTER_ALIGNMENT);
+        
+        correo=new JLabel("Correo:");
+        correo.setFont(new Font("Arial", Font.BOLD, 24));
+        correo.setAlignmentX(Component.CENTER_ALIGNMENT);
+        
+        estado= new JLabel ("Disponible");
+        estado.setFont(new Font("Arial", Font.BOLD, 24));
+        estado.setAlignmentX(Component.CENTER_ALIGNMENT);
+        
+        conectado=new JLabel("Conectad@");
+        conectado.setFont(new Font("Arial", Font.BOLD, 24));
+        conectado.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         cuerpo.add(lblFoto);
         cuerpo.add(Box.createRigidArea(new Dimension(0, 20)));
         cuerpo.add(lblNombre);
         cuerpo.add(lblCodigo);
+        cuerpo.add(correo);
+        cuerpo.add(estado);
+        cuerpo.add(conectado);
 
         add(cuerpo, BorderLayout.CENTER);
     }

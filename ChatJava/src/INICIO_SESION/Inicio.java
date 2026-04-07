@@ -30,7 +30,7 @@ public class Inicio extends JFrame implements ActionListener {
     public void configFrame() {
         setSize(new Dimension(400, 400));
         setLocationRelativeTo(null);
-        setTitle("Inicio del Chat");
+        setTitle("Charlemos-Inicio");
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         // El JFrame mantiene BorderLayout, lo cual está perfecto
@@ -55,7 +55,7 @@ public class Inicio extends JFrame implements ActionListener {
         gbc.insets = new Insets(10, 0, 10, 0);
 
         // 1. Etiqueta de Bienvenida
-        bienvenida = new JLabel("Bienvenido al Chat.", JLabel.CENTER);
+        bienvenida = new JLabel("Bienvenido a CHARLEMOS.", JLabel.CENTER);
         bienvenida.setFont(new Font("Arial", Font.BOLD, 20));
         
         panelPrimero.add(bienvenida);

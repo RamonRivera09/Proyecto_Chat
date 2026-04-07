@@ -39,7 +39,7 @@ public class Registro extends JFrame implements ActionListener {
     public void configFrame() {
         setSize(new Dimension(400, 400));
         setLocationRelativeTo(null);
-        setTitle("Registro al Chat");
+        setTitle("CHARLEMOS-Registro");
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());

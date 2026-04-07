@@ -56,7 +56,7 @@ public class Chat extends JFrame implements ActionListener {
     private JComboBox<String> emojis;
     private JComboBox<String> fuentes;
 
-    private JMenuItem juego;
+    private JMenuItem juego, correo;
     private JTextField txtBuscar;
     private JButton btnBuscar;
 
@@ -95,12 +95,12 @@ public class Chat extends JFrame implements ActionListener {
         Separador.setPreferredSize(new Dimension(1000, 70));
         Separador.setBackground(new Color(200, 162, 200));
 
-        Titulo = new JLabel("  WhatsChafa");
+        Titulo = new JLabel("CHARLEMOS");
         Titulo.setFont(new Font("Arial", Font.BOLD, 22));
         Titulo.setForeground(Color.WHITE);
         Separador.add(Titulo, BorderLayout.WEST);
 
-        MiPerfil = new JLabel(usuarioLogueado + " Conectado " + " \u2630   ");
+        MiPerfil = new JLabel(usuarioLogueado + " Conectad@ " + " \u2630   ");
         MiPerfil.setFont(new Font("Arial", Font.BOLD, 20));
         MiPerfil.setFont(new Font("Arial", Font.BOLD, 25));
         MiPerfil.setForeground(Color.WHITE);
@@ -113,6 +113,9 @@ public class Chat extends JFrame implements ActionListener {
             cardLayout.show(pContenedor, "PERFIL");
         });
         Opciones.add(itemVerPerfil);
+        correo=new JMenuItem("Registrar correo");
+        correo.addActionListener(this);
+        Opciones.add(correo);
         juego = new JMenuItem("Jugar");
         juego.addActionListener(this);
         Opciones.add(new JMenuItem("Contacto"));
@@ -177,7 +180,7 @@ public class Chat extends JFrame implements ActionListener {
 
                 if (contacto.contains(busqueda)) {
                     listaContactos.setSelectedIndex(i);
-                    listaContactos.ensureIndexIsVisible(i); 
+                    listaContactos.ensureIndexIsVisible(i);
                     encontrado = true;
                     break;
                 }
@@ -324,10 +327,20 @@ public class Chat extends JFrame implements ActionListener {
         }
     }
 
-    // MENSAJE DERECHA
     public void enviarMensaje(JTextField Mensaje) {
         String texto = Mensaje.getText();
         String tipoFuente = fuentes.getSelectedItem().toString();
+
+        // Lista de emojis disponibles
+        String[] listaEmojis = {"😊", "😂", "❤️", "👍", "😢"};
+
+        // 👇 Detectar si el texto contiene algún emoji
+        for (String emoji : listaEmojis) {
+            if (texto.contains(emoji)) {
+                tipoFuente = "Segoe UI Emoji";
+                break;
+            }
+        }
 
         if (!texto.isEmpty()) {
             String hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
@@ -340,7 +353,7 @@ public class Chat extends JFrame implements ActionListener {
             burbuja.setBackground(new Color(220, 248, 198));
 
             JLabel mensaje = new JLabel(texto);
-            mensaje.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 16));
+            mensaje.setFont(new Font(tipoFuente, Font.PLAIN, 16));
 
             JLabel horaLabel = new JLabel(hora);
             horaLabel.setFont(new Font("Arial", Font.PLAIN, 10));
@@ -354,7 +367,6 @@ public class Chat extends JFrame implements ActionListener {
             pMensajes.revalidate();
             pMensajes.repaint();
 
-            // Para que el scroll baje al final de verdad:
             SwingUtilities.invokeLater(() -> {
                 JScrollBar vertical = scrollMensajes.getVerticalScrollBar();
                 vertical.setValue(vertical.getMaximum());
@@ -362,15 +374,37 @@ public class Chat extends JFrame implements ActionListener {
 
             Mensaje.setText("");
 
-            // SOCKET: Enviamos el texto al servidor
+            // 👇 Enviar texto + fuente
             if (salida != null) {
-                salida.println(texto);
+                salida.println(texto + "||" + tipoFuente);
             }
         }
     }
 
-    // MENSAJE IZQUIERDA
-    public void recibirMensaje(String texto) {
+    
+    public void recibirMensaje(String textoRecibido) {
+
+        // Separar texto y fuente
+        String[] partes = textoRecibido.split("\\|\\|");
+
+        String texto = partes[0];
+        String fuente = "Arial"; // por defecto
+
+        if (partes.length > 1) {
+            fuente = partes[1];
+        }
+
+        // Lista de emojis
+        String[] listaEmojis = {"😊", "😂", "❤️", "👍", "😢"};
+
+        // 👇 Forzar fuente emoji si el texto contiene alguno
+        for (String emoji : listaEmojis) {
+            if (texto.contains(emoji)) {
+                fuente = "Segoe UI Emoji";
+                break;
+            }
+        }
+
         String hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
 
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -381,7 +415,7 @@ public class Chat extends JFrame implements ActionListener {
         burbuja.setBackground(Color.WHITE);
 
         JLabel mensaje = new JLabel(texto);
-        mensaje.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 16));
+        mensaje.setFont(new Font(fuente, Font.PLAIN, 16));
 
         JLabel horaLabel = new JLabel(hora);
         horaLabel.setFont(new Font("Arial", Font.PLAIN, 10));
@@ -393,14 +427,15 @@ public class Chat extends JFrame implements ActionListener {
 
         pMensajes.add(panel);
         pMensajes.revalidate();
+        pMensajes.repaint();
 
-        // Para que el scroll baje al final de verdad:
         SwingUtilities.invokeLater(() -> {
             JScrollBar vertical = scrollMensajes.getVerticalScrollBar();
             vertical.setValue(vertical.getMaximum());
         });
     }
 
+    
     private void cerrarSesion() {
         try {
             // 1. Avisar al servidor o cerrar los flujos

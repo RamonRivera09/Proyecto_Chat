@@ -2,6 +2,7 @@ package INICIO_SESION;
 
 import GUI.Chat;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -39,7 +40,7 @@ public class Inicio_Sesion extends JFrame implements ActionListener {
     public void configFrame() {
         setSize(new Dimension(400, 400));
         setLocationRelativeTo(null);
-        setTitle("Iniciar Sesión al Chat");
+        setTitle("CHARLEMOS-Iniciar sesión");
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
@@ -48,6 +49,7 @@ public class Inicio_Sesion extends JFrame implements ActionListener {
     public void initComponents() {
         // Creamos un solo panel y le asignamos GridBagLayout
         central = new JPanel();
+        central.setBackground(new Color(229, 221, 213));
         central.setLayout(new GridBagLayout());
 
         // GridBagConstraints nos permite controlar la posición y márgenes
@@ -83,6 +85,7 @@ public class Inicio_Sesion extends JFrame implements ActionListener {
 
         //5. Crear Panel para los botones
         sur = new JPanel();
+        sur.setBackground(new Color(200, 162, 200));
         sur.setLayout(new BorderLayout());
 
         //6. Crear botón atrás
