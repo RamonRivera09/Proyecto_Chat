@@ -91,31 +91,63 @@ public class PantallaActualizar extends JPanel {
 
     // 💾 Actualizar en la base de datos
     private void actualizarPerfil() {
-        String nuevoNombre = txtNombre.getText();
+        String nuevoNombre = txtNombre.getText().trim();
         String nuevoEstado = (String) cmbEstado.getSelectedItem();
-
-        if (nuevoNombre.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "El nombre no puede estar vacío");
-            return;
-        }
 
         try (Connection conn = Conexion.obtenerConexion()) {
 
-            // Usamos el mismo enfoque que en registro
-            String sql = "UPDATE usuarios SET usuario = ?, estado = ?, foto = ? WHERE usuario = ?";
-            PreparedStatement pstmt = conn.prepareStatement(sql);
+            // Construimos el SQL dinámicamente según los campos que no estén vacíos
+            StringBuilder sql = new StringBuilder("UPDATE usuarios SET ");
+            boolean primerCampo = true;
 
-            pstmt.setString(1, nuevoNombre);
-            pstmt.setString(2, nuevoEstado);
-            pstmt.setString(3, rutaFoto);
-            pstmt.setString(4, usuarioActual);
+            if (!nuevoNombre.isEmpty()) {
+                sql.append("usuario = ?");
+                primerCampo = false;
+            }
 
-            pstmt.executeUpdate();
+            if (nuevoEstado != null && !nuevoEstado.isEmpty()) {
+                if (!primerCampo) {
+                    sql.append(", ");
+                }
+                sql.append("estado = ?");
+                primerCampo = false;
+            }
 
-            JOptionPane.showMessageDialog(this, "Perfil actualizado correctamente");
+            if (rutaFoto != null && !rutaFoto.isEmpty()) {
+                if (!primerCampo) {
+                    sql.append(", ");
+                }
+                sql.append("foto = ?");
+            }
 
-            // Actualizar referencia del usuario actual
-            usuarioActual = nuevoNombre;
+            sql.append(" WHERE usuario = ?");
+
+            PreparedStatement pstmt = conn.prepareStatement(sql.toString());
+
+            // Asignar parámetros según el orden
+            int indice = 1;
+            if (!nuevoNombre.isEmpty()) {
+                pstmt.setString(indice++, nuevoNombre);
+            }
+            if (nuevoEstado != null && !nuevoEstado.isEmpty()) {
+                pstmt.setString(indice++, nuevoEstado);
+            }
+            if (rutaFoto != null && !rutaFoto.isEmpty()) {
+                pstmt.setString(indice++, rutaFoto);
+            }
+
+            pstmt.setString(indice, usuarioActual);
+
+            int filas = pstmt.executeUpdate();
+
+            if (filas > 0) {
+                JOptionPane.showMessageDialog(this, "Perfil actualizado correctamente");
+                if (!nuevoNombre.isEmpty()) {
+                    usuarioActual = nuevoNombre;
+                }
+            } else {
+                JOptionPane.showMessageDialog(this, "No se realizaron cambios.");
+            }
 
         } catch (SQLException ex) {
             if (ex.getErrorCode() == 1062) {
