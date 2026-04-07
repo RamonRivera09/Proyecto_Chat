@@ -132,6 +132,11 @@ public class Registro extends JFrame implements ActionListener {
             String pass1 = new String(contra1.getPassword());
             String pass2 = new String(contra2.getPassword());
 
+            // Generar código automático
+            String codigo = "USR-"
+                    + nombreUsuario.substring(0, Math.min(2, nombreUsuario.length())).toUpperCase()
+                    + (int) (Math.random() * (999 - 1) + 1);
+
             // Validar campos vacíos
             if (nombreUsuario.isEmpty() || pass1.isEmpty() || pass2.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Por favor, llena todos los campos.", "Campos vacíos", JOptionPane.WARNING_MESSAGE);
@@ -144,33 +149,36 @@ public class Registro extends JFrame implements ActionListener {
                 return;
             }
 
-            // Usamos nuestra nueva clase ConexionDB
             try (Connection conn = Conexion.obtenerConexion()) {
 
-                // Si la conexión fue exitosa (no es nula)
                 if (conn != null) {
-                    String sql = "INSERT INTO usuarios (usuario, contrasena) VALUES (?, ?)";
+                    String sql = "INSERT INTO usuarios (usuario, contrasena, codigo, estado, conectado) VALUES (?, ?, ?, ?, ?)";
                     PreparedStatement pstmt = conn.prepareStatement(sql);
+
                     pstmt.setString(1, nombreUsuario);
                     pstmt.setString(2, pass1);
+                    pstmt.setString(3, codigo);
+                    pstmt.setString(4, "Disponible");
+                    pstmt.setString(5, "Conectado");
 
-                    pstmt.executeUpdate(); // Ejecutamos el guardado
+                    pstmt.executeUpdate();
 
                     JOptionPane.showMessageDialog(this, "¡Usuario registrado con éxito!");
 
-                    // Limpiamos los campos
+                    // Limpiar campos
                     user.setText("");
                     contra1.setText("");
                     contra2.setText("");
                 }
+
             } catch (SQLException ex) {
-                // El código 1062 en MySQL significa "Duplicate entry" (Entrada duplicada)
                 if (ex.getErrorCode() == 1062) {
-                    JOptionPane.showMessageDialog(this, "Ese nombre de usuario ya está en uso.", "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Usuario o código ya existente.", "Error", JOptionPane.ERROR_MESSAGE);
                 } else {
                     JOptionPane.showMessageDialog(this, "Error en la base de datos: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
+
             new Inicio();
             this.dispose();
         }
