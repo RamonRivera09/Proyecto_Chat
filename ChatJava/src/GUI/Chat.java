@@ -57,7 +57,7 @@ public class Chat extends JFrame implements ActionListener {
     private JComboBox<String> emojis;
     private JComboBox<String> fuentes;
 
-    private JMenuItem juego, correo;
+    private JMenuItem juego, correo, contacto;
     private JTextField txtBuscar;
     private JButton btnBuscar;
 
@@ -122,7 +122,11 @@ public class Chat extends JFrame implements ActionListener {
         Opciones.add(correo);
         juego = new JMenuItem("Jugar");
         juego.addActionListener(this);
-        Opciones.add(new JMenuItem("Contacto"));
+        contacto=new JMenuItem("Contacto");
+        contacto.addActionListener(e->{
+            AgregarContacto ventanacontacto=new AgregarContacto();
+            ventanacontacto.setVisible(true);});
+        Opciones.add(contacto);
         JMenuItem itemAjustes=new JMenuItem("Ajustes");
         itemAjustes.addActionListener(e->{cardLayout.show(pContenedor, "AJUSTE");});
         Opciones.add(itemAjustes);

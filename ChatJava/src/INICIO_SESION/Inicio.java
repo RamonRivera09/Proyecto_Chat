@@ -60,6 +60,7 @@ public class Inicio extends JFrame implements ActionListener {
         // 1. Etiqueta de Bienvenida
         bienvenida = new JLabel("Bienvenido a CHARLEMOS.", JLabel.CENTER);
         bienvenida.setFont(new Font("Arial", Font.BOLD, 20));
+        bienvenida.setForeground(Color.WHITE);
         
         panelPrimero.add(bienvenida);
         /*gbc.gridy = 0; // Fila 0
