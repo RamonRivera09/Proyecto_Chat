@@ -35,6 +35,7 @@ import java.time.format.DateTimeFormatter;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.nio.charset.StandardCharsets;
+import javax.swing.ImageIcon;
 import javax.swing.ListModel;
 
 public class Chat extends JFrame implements ActionListener {
@@ -68,9 +69,10 @@ public class Chat extends JFrame implements ActionListener {
         initComponents();
 
         // Opcional: Cambiar el título de la ventana con el nombre
-        setTitle("WhatsChafa - Sesión de: " + usuarioLogueado);
+        setTitle("CHARLEMOS - Sesión de: " + usuarioLogueado);
 
         conectarAlServidor();
+        this.setIconImage(new ImageIcon(getClass().getResource("/IMAGENES/Logo_Chat.jpg")).getImage());
         setVisible(true);
     }
 
@@ -88,7 +90,9 @@ public class Chat extends JFrame implements ActionListener {
     public void initComponents() {
         pantallaInicial = new JPanel(new BorderLayout());
         PantallaPerfil vistaPerfil = new PantallaPerfil(usuarioLogueado, cardLayout, pContenedor);
+        PantallaActualizar ajuste= new PantallaActualizar(usuarioLogueado, cardLayout, pContenedor);
         pContenedor.add(vistaPerfil, "PERFIL");
+        pContenedor.add(ajuste, "AJUSTE");
 
         // Cabecera superior
         Separador = new JPanel(new BorderLayout());
@@ -119,7 +123,9 @@ public class Chat extends JFrame implements ActionListener {
         juego = new JMenuItem("Jugar");
         juego.addActionListener(this);
         Opciones.add(new JMenuItem("Contacto"));
-        Opciones.add(new JMenuItem("Ajustes"));
+        JMenuItem itemAjustes=new JMenuItem("Ajustes");
+        itemAjustes.addActionListener(e->{cardLayout.show(pContenedor, "AJUSTE");});
+        Opciones.add(itemAjustes);
         Opciones.add(juego);
         Opciones.addSeparator();
 

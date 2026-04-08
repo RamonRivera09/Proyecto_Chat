@@ -21,6 +21,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import javax.swing.ImageIcon;
 import javax.swing.JOptionPane;
 
 public class Inicio_Sesion extends JFrame implements ActionListener {
@@ -40,6 +41,7 @@ public class Inicio_Sesion extends JFrame implements ActionListener {
     public void configFrame() {
         setSize(new Dimension(400, 400));
         setLocationRelativeTo(null);
+        this.setIconImage(new ImageIcon(getClass().getResource("/IMAGENES/Logo_Chat.jpg")).getImage());
         setTitle("CHARLEMOS-Iniciar sesión");
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

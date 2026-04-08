@@ -25,6 +25,7 @@ public class PantallaActualizar extends JPanel {
 
         // 🔹 Cabecera
         JPanel cabecera = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        cabecera.setBackground(new Color(200, 162, 200));
         JButton btnVolver = new JButton("<- Volver");
         btnVolver.addActionListener(e -> cl.show(contenedor, "PERFIL"));
         cabecera.add(btnVolver);
@@ -33,6 +34,7 @@ public class PantallaActualizar extends JPanel {
 
         // 🔹 Cuerpo
         JPanel cuerpo = new JPanel();
+        cuerpo.setBackground(new Color(229, 221, 213));
         cuerpo.setLayout(new BoxLayout(cuerpo, BoxLayout.Y_AXIS));
         cuerpo.setBorder(BorderFactory.createEmptyBorder(40, 40, 40, 40));
 
@@ -43,7 +45,8 @@ public class PantallaActualizar extends JPanel {
         btnSeleccionarFoto.addActionListener(e -> seleccionarFoto());
 
         // 👤 Nombre de usuario
-        txtNombre = new JTextField(15);
+        txtNombre = new JTextField();
+        txtNombre.setPreferredSize(new Dimension (200, 50));
         txtNombre.setText(nombreUsuario);
 
         // 🔹 Estado
@@ -65,13 +68,10 @@ public class PantallaActualizar extends JPanel {
         cuerpo.add(new JLabel("Nombre de usuario:"));
         cuerpo.add(txtNombre);
 
-        cuerpo.add(Box.createRigidArea(new Dimension(0, 20)));
-
         cuerpo.add(new JLabel("Estado:"));
         cuerpo.add(cmbEstado);
-
+        
         cuerpo.add(Box.createRigidArea(new Dimension(0, 20)));
-
         cuerpo.add(btnGuardar);
 
         add(cuerpo, BorderLayout.CENTER);

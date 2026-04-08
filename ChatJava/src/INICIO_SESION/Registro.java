@@ -20,6 +20,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import javax.swing.ImageIcon;
 import javax.swing.JOptionPane;
 
 public class Registro extends JFrame implements ActionListener {
@@ -33,6 +34,7 @@ public class Registro extends JFrame implements ActionListener {
     public Registro() {
         configFrame();
         initComponents();
+	this.setIconImage(new ImageIcon(getClass().getResource("/IMAGENES/Logo_Chat.jpg")).getImage());
         setVisible(true);
     }
 
