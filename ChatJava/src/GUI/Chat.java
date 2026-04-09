@@ -3,6 +3,8 @@ package GUI;
 //import Snake.FrameJuego;
 import INICIO_SESION.Conexion;
 import INICIO_SESION.Inicio;
+import SERVIDOR.Manejador_Cliente;
+import static SERVIDOR.Manejador_Cliente.usuariosConectados;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -11,6 +13,7 @@ import java.net.Socket;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -18,6 +21,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.OutputStreamWriter;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -43,6 +47,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 
 public class Chat extends JFrame implements ActionListener {
@@ -70,14 +75,14 @@ public class Chat extends JFrame implements ActionListener {
 
     private String usuarioLogueado; // Variable para guardar el nombre
     DefaultListModel<String> modeloContactos = new DefaultListModel<>();
-private DefaultListModel<String> modeloNotificaciones = new DefaultListModel<>();
-private JList<String> listaNotificaciones = new JList<>(modeloNotificaciones);
+    private DefaultListModel<String> modeloNotificaciones = new DefaultListModel<>();
+    private JList<String> listaNotificaciones = new JList<>(modeloNotificaciones);
 
     public Chat(String usuario) {
         this.usuarioLogueado = usuario; // Guardamos el nombre
         configFrame();
         initComponents();
-cargarContactos();
+        cargarContactos();
 
         // Opcional: Cambiar el título de la ventana con el nombre
         setTitle("CHARLEMOS - Sesión de: " + usuarioLogueado);
@@ -128,9 +133,9 @@ cargarContactos();
             cardLayout.show(pContenedor, "PERFIL");
         });
         Opciones.add(itemVerPerfil);
-JMenuItem notificaciones = new JMenuItem("Notificaciones");
-Opciones.add(notificaciones);
-notificaciones.addActionListener(e -> mostrarNotificaciones());
+        JMenuItem notificaciones = new JMenuItem("Notificaciones");
+        Opciones.add(notificaciones);
+        notificaciones.addActionListener(e -> mostrarNotificaciones());
         correo = new JMenuItem("Registrar correo");
         correo.addActionListener(this);
         Opciones.add(correo);
@@ -190,7 +195,6 @@ notificaciones.addActionListener(e -> mostrarNotificaciones());
         pantallaInicial.add(Separador, BorderLayout.NORTH);
 
         // Lista contactos
-        
         JList<String> listaContactos = new JList<>(modeloContactos);
         listaContactos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         listaContactos.setFont(new Font("Arial", Font.PLAIN, 24));
@@ -341,134 +345,135 @@ notificaciones.addActionListener(e -> mostrarNotificaciones());
 
     public void conectarAlServidor() {
         try {
-            // 1. Nos conectamos al "puerto" de tu computadora (localhost) donde vive el Servidor
             socket = new Socket("localhost", 9090);
+            // Usamos UTF_8 para que los emojis no se rompan
+            // Al crear la entrada:
             entrada = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-            salida = new PrintWriter(new java.io.OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
- salida.println(usuarioLogueado);  // Enviamos el nombre del usuario logueado
-        System.out.println("Usuario enviado: " + usuarioLogueado);  // Log para verificar
 
-            // 2. Creamos un Hilo (Thread) que estará siempre escuchando si llega un mensaje
+// Al crear la salida (fíjate en el OutputStreamWriter):
+            salida = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
+
+            // 1️⃣ IDENTIFICACIÓN: Enviamos el CÓDIGO, no el nombre.
+            // Esto soluciona que las notificaciones no lleguen en tiempo real.
+            String miCodigo = obtenerCodigoUsuarioActual();
+            salida.println(miCodigo);
+            System.out.println("Identificado en servidor con código: " + miCodigo);
+
+            // 2️⃣ HILO DE ESCUCHA: El "oído" del cliente
             Thread hiloEscucha = new Thread(() -> {
-                String mensajeRecibido;
                 try {
-                    // Mientras el servidor nos siga mandando cosas...
-                    while ((mensajeRecibido = entrada.readLine()) != null) {
-                        // ... mandamos ese texto a tu método para dibujar la burbuja izquierda
-                        recibirMensaje(mensajeRecibido);
+                    String linea;
+                    while ((linea = entrada.readLine()) != null) {
+                        final String mensajeRecibido = linea;
+
+                        // Ejecutamos en el hilo de la interfaz (EDT) para evitar errores visuales
+                        SwingUtilities.invokeLater(() -> {
+                            if (mensajeRecibido.startsWith("MSG||")) {
+                                // Formato: MSG||EMISOR||RECEPTOR||CONTENIDO
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                if (partes.length >= 4) {
+                                    String nombreEmisor = obtenerNombreDesdeCodigo(partes[1]);
+                                    String contenido = partes[3];
+                                    // Usamos el método de las burbujas
+                                    mostrarMensajeEnChat(nombreEmisor, contenido, "Arial", false);
+                                }
+                            } else if (mensajeRecibido.startsWith("NOTIF||")) {
+                                // Formato: NOTIF||EMISOR||RECEPTOR||MENSAJE
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                if (partes.length >= 4) {
+                                    String nombreEmisor = obtenerNombreDesdeCodigo(partes[1]);
+                                    String accion = partes[3];
+                                    agregarNotificacion(nombreEmisor, accion);
+
+                                    // Opcional: Si la notificación es que te agregaron, 
+                                    // refrescamos la lista de contactos automáticamente
+                                    cargarContactos();
+                                    JOptionPane.showMessageDialog(this, nombreEmisor + " " + accion);
+                                }
+                            }
+                        });
                     }
                 } catch (IOException ex) {
-                    System.out.println("Desconectado del servidor.");
+                    System.out.println("Conexión con el servidor perdida.");
                 }
             });
-            hiloEscucha.start(); // Arrancamos la oreja virtual
+            hiloEscucha.start();
 
         } catch (IOException ex) {
-            javax.swing.JOptionPane.showMessageDialog(this, "No se pudo conectar al servidor. ¿Está encendido?", "Error de red", javax.swing.JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error: El servidor no responde.", "Error de Red", JOptionPane.ERROR_MESSAGE);
         }
     }
 
-    public void enviarMensaje(JTextField Mensaje) {
+    private void enviarMensaje(JTextField Mensaje) {
         String texto = Mensaje.getText();
+        if (texto.isEmpty()) {
+            return;
+        }
+
         String tipoFuente = fuentes.getSelectedItem().toString();
 
-        // Lista de emojis disponibles
+        // Detectar emojis y usar fuente específica
         String[] listaEmojis = {"😊", "😂", "❤️", "👍", "😢"};
-
-        // 👇 Detectar si el texto contiene algún emoji
         for (String emoji : listaEmojis) {
             if (texto.contains(emoji)) {
                 tipoFuente = "Segoe UI Emoji";
-                break;
             }
         }
 
-        if (!texto.isEmpty()) {
-            String hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
+        // Mostrar en pantalla
+        mostrarMensajeEnChat(usuarioLogueado, texto, tipoFuente, true);
 
-            JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-            panel.setBackground(new Color(229, 221, 213));
+        // --------------- Enviar al servidor ---------------
+        String receptor = Contactos.getText(); // nombre del contacto seleccionado
+        String codigoReceptor = obtenerCodigoDesdeNombre(receptor);
 
-            JPanel burbuja = new JPanel();
-            burbuja.setLayout(new BoxLayout(burbuja, BoxLayout.Y_AXIS));
-            burbuja.setBackground(new Color(220, 248, 198));
-
-            JLabel mensaje = new JLabel(texto);
-            mensaje.setFont(new Font(tipoFuente, Font.PLAIN, 16));
-
-            JLabel horaLabel = new JLabel(hora);
-            horaLabel.setFont(new Font("Arial", Font.PLAIN, 10));
-            horaLabel.setForeground(Color.GRAY);
-
-            burbuja.add(mensaje);
-            burbuja.add(horaLabel);
-            panel.add(burbuja);
-
-            pMensajes.add(panel);
-            pMensajes.revalidate();
-            pMensajes.repaint();
-
-            SwingUtilities.invokeLater(() -> {
-                JScrollBar vertical = scrollMensajes.getVerticalScrollBar();
-                vertical.setValue(vertical.getMaximum());
-            });
-
-            Mensaje.setText("");
-
-            // 👇 Enviar texto + fuente
-            if (salida != null) {
-                salida.println(texto + "||" + tipoFuente);
-            }
+        if (codigoReceptor != null && salida != null) {
+            salida.println("MSG||" + obtenerCodigoUsuarioActual() + "||" + codigoReceptor + "||" + texto);
         }
+
+        Mensaje.setText("");
     }
 
-    public void recibirMensaje(String textoRecibido) {
+    private void mostrarMensajeEnChat(String emisor, String texto, String fuente, boolean esMio) {
+        // 1. Crear el contenedor del mensaje (el renglón)
+        JPanel panelFila = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
+        panelFila.setBackground(new Color(229, 221, 213)); // Color de fondo del chat
 
-        // Separar texto y fuente
-        String[] partes = textoRecibido.split("\\|\\|");
-
-        String texto = partes[0];
-        String fuente = "Arial"; // por defecto
-
-        if (partes.length > 1) {
-            fuente = partes[1];
-        }
-
-        // Lista de emojis
-        String[] listaEmojis = {"😊", "😂", "❤️", "👍", "😢"};
-
-        // 👇 Forzar fuente emoji si el texto contiene alguno
-        for (String emoji : listaEmojis) {
-            if (texto.contains(emoji)) {
-                fuente = "Segoe UI Emoji";
-                break;
-            }
-        }
-
-        String hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
-
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        panel.setBackground(new Color(229, 221, 213));
-
+        // 2. Crear la burbuja
         JPanel burbuja = new JPanel();
         burbuja.setLayout(new BoxLayout(burbuja, BoxLayout.Y_AXIS));
-        burbuja.setBackground(Color.WHITE);
+        burbuja.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
 
-        JLabel mensaje = new JLabel(texto);
-        mensaje.setFont(new Font(fuente, Font.PLAIN, 16));
+        // Color: Verde si es mío, Blanco si es de otros
+        burbuja.setBackground(esMio ? new Color(220, 248, 198) : Color.WHITE);
 
-        JLabel horaLabel = new JLabel(hora);
-        horaLabel.setFont(new Font("Arial", Font.PLAIN, 10));
-        horaLabel.setForeground(Color.GRAY);
+        // 3. Formatear el contenido
+        String hora = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
 
-        burbuja.add(mensaje);
-        burbuja.add(horaLabel);
-        panel.add(burbuja);
+        JLabel lblNombre = new JLabel(esMio ? "Tú" : emisor);
+        lblNombre.setFont(new Font("Arial", Font.BOLD, 10));
+        lblNombre.setForeground(new Color(100, 100, 100));
 
-        pMensajes.add(panel);
+        JLabel lblTexto = new JLabel(texto);
+        lblTexto.setFont(new Font(fuente, Font.PLAIN, 16));
+
+        JLabel lblHora = new JLabel(hora);
+        lblHora.setFont(new Font("Arial", Font.ITALIC, 9));
+        lblHora.setAlignmentX(Component.RIGHT_ALIGNMENT);
+
+        // 4. Armar la burbuja y añadirla al chat
+        burbuja.add(lblNombre);
+        burbuja.add(lblTexto);
+        burbuja.add(lblHora);
+
+        panelFila.add(burbuja);
+
+        // 5. Actualizar la interfaz
+        pMensajes.add(panelFila);
         pMensajes.revalidate();
         pMensajes.repaint();
 
+        // Auto-scroll hacia abajo
         SwingUtilities.invokeLater(() -> {
             JScrollBar vertical = scrollMensajes.getVerticalScrollBar();
             vertical.setValue(vertical.getMaximum());
@@ -499,137 +504,146 @@ notificaciones.addActionListener(e -> mostrarNotificaciones());
             this.dispose();
         }
     }
-private void mostrarNotificaciones() {
-    JPanel panel = new JPanel(new BorderLayout());
-    panel.add(new JScrollPane(listaNotificaciones), BorderLayout.CENTER);
 
-    JButton btnVolver = new JButton("Volver a Contactos");
-    btnVolver.addActionListener(e -> cardLayout.show(pContenedor, "LISTA"));
-    panel.add(btnVolver, BorderLayout.SOUTH);
+    private void mostrarNotificaciones() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.add(new JScrollPane(listaNotificaciones), BorderLayout.CENTER);
 
-    pContenedor.add(panel, "NOTIFICACIONES");
-    cardLayout.show(pContenedor, "NOTIFICACIONES");
+        JButton btnVolver = new JButton("Volver a Contactos");
+        btnVolver.addActionListener(e -> cardLayout.show(pContenedor, "LISTA"));
+        panel.add(btnVolver, BorderLayout.SOUTH);
 
-    // Doble clic sobre la notificación abre chat
-    listaNotificaciones.addMouseListener(new java.awt.event.MouseAdapter() {
-        public void mouseClicked(java.awt.event.MouseEvent evt) {
-            if (evt.getClickCount() == 2) {
-                int index = listaNotificaciones.locationToIndex(evt.getPoint());
-                if (index >= 0) {
-                    String item = modeloNotificaciones.get(index);
-                    String nombreContacto = item.split(" - ")[0]; // extrae el nombre
-                    abrirChatCon(nombreContacto);
+        pContenedor.add(panel, "NOTIFICACIONES");
+        cardLayout.show(pContenedor, "NOTIFICACIONES");
+
+        // Doble clic sobre la notificación abre chat
+        listaNotificaciones.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    int index = listaNotificaciones.locationToIndex(evt.getPoint());
+                    if (index >= 0) {
+                        String item = modeloNotificaciones.get(index);
+                        String nombreContacto = item.split(" - ")[0]; // extrae el nombre
+                        abrirChatCon(nombreContacto);
+                    }
                 }
             }
-        }
-    });
-}
-private void abrirChatCon(String nombreContacto) {
-    Contactos.setText(nombreContacto);
-    cardLayout.show(pContenedor, "CHAT");
-}
-public void enviarNotificacion(String codigoEmisor, String codigoReceptor, String mensaje) {
-    try (Connection conn = Conexion.obtenerConexion()) {
-
-        // Obtener IDs
-        String sqlId = "SELECT id FROM usuarios WHERE codigo = ?";
-
-        PreparedStatement psE = conn.prepareStatement(sqlId);
-        psE.setString(1, codigoEmisor);
-        ResultSet rsE = psE.executeQuery();
-        int idEmisor = rsE.next() ? rsE.getInt("id") : -1;
-
-        PreparedStatement psR = conn.prepareStatement(sqlId);
-        psR.setString(1, codigoReceptor);
-        ResultSet rsR = psR.executeQuery();
-        int idReceptor = rsR.next() ? rsR.getInt("id") : -1;
-
-        if (idEmisor == -1 || idReceptor == -1) return;
-
-        // Insertar en BD
-        String sqlInsert = "INSERT INTO notificaciones(emisor_id, receptor_id, mensaje) VALUES (?, ?, ?)";
-        PreparedStatement psInsert = conn.prepareStatement(sqlInsert);
-        psInsert.setInt(1, idEmisor);
-        psInsert.setInt(2, idReceptor);
-        psInsert.setString(3, mensaje);
-        psInsert.executeUpdate();
-
-        // 🔥 Mostrar en tiempo real SOLO si soy el receptor
-        String codigoActual = obtenerCodigoUsuarioActual();
-
-        if (codigoReceptor.equals(codigoActual)) {
-            String nombreEmisor = obtenerNombreDesdeCodigo(codigoEmisor, conn);
-            String hora = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
-
-            modeloNotificaciones.addElement(nombreEmisor + " - " + hora + " : " + mensaje);
-        }
-
-    } catch (SQLException ex) {
-        JOptionPane.showMessageDialog(this, "Error al enviar notificación: " + ex.getMessage());
+        });
     }
-}
-private String obtenerCodigoUsuarioActual() {
-    try (Connection conn = Conexion.obtenerConexion()) {
-        String sql = "SELECT codigo FROM usuarios WHERE usuario = ?";
-        PreparedStatement ps = conn.prepareStatement(sql);
-        ps.setString(1, usuarioLogueado);
-        ResultSet rs = ps.executeQuery();
 
-        if (rs.next()) {
-            return rs.getString("codigo");
+    private void abrirChatCon(String nombreContacto) {
+        Contactos.setText(nombreContacto);
+        cardLayout.show(pContenedor, "CHAT");
+    }
+
+    public void enviarNotificacion(String codigoEmisor, String codigoReceptor, String mensaje) {
+        // YA NO NECESITAS BUSCAR EL NOMBRE EN LA BD AQUÍ
+        // Porque el mapa 'usuariosConectados' ahora usa CÓDIGOS como llave.
+
+        if (usuariosConectados.containsKey(codigoReceptor)) {
+            Manejador_Cliente mc = usuariosConectados.get(codigoReceptor);
+            mc.salida.println("NOTIF||" + codigoEmisor + "||" + codigoReceptor + "||" + mensaje);
+            System.out.println("Notificación enviada con éxito al código: " + codigoReceptor);
+        } else {
+            System.out.println("Usuario desconectado o código no encontrado: " + codigoReceptor);
         }
-    } catch (SQLException e) {
-        e.printStackTrace();
     }
-    return "";
-}
-private String obtenerNombreDesdeCodigo(String codigo, Connection conn) throws SQLException {
-    String sql = "SELECT usuario FROM usuarios WHERE codigo = ?";
-    PreparedStatement ps = conn.prepareStatement(sql);
-    ps.setString(1, codigo);
-    ResultSet rs = ps.executeQuery();
 
-    if (rs.next()) {
-        return rs.getString("usuario");
-    }
-    return codigo;
-}
-private void cargarContactos() {
-    try (Connection conn = Conexion.obtenerConexion()) {
+    private String obtenerCodigoUsuarioActual() {
+        try (Connection conn = Conexion.obtenerConexion()) {
+            String sql = "SELECT codigo FROM usuarios WHERE usuario = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, usuarioLogueado);
+            ResultSet rs = ps.executeQuery();
 
-        // Obtener ID del usuario actual
-        String sqlId = "SELECT id FROM usuarios WHERE usuario = ?";
-        PreparedStatement psId = conn.prepareStatement(sqlId);
-        psId.setString(1, usuarioLogueado);
-        ResultSet rsId = psId.executeQuery();
-
-        if (!rsId.next()) return;
-
-        int idUsuario = rsId.getInt("id");
-
-        // Obtener contactos
-        String sql = "SELECT u.usuario FROM contactos c " +
-                     "JOIN usuarios u ON c.contacto_id = u.id " +
-                     "WHERE c.usuario_id = ? AND c.estado = 'aceptado'";
-
-        PreparedStatement ps = conn.prepareStatement(sql);
-        ps.setInt(1, idUsuario);
-        ResultSet rs = ps.executeQuery();
-
-        modeloContactos.clear(); // limpiar lista antes
-
-        while (rs.next()) {
-            modeloContactos.addElement(rs.getString("usuario"));
+            if (rs.next()) {
+                return rs.getString("codigo");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
-
-    } catch (SQLException e) {
-        JOptionPane.showMessageDialog(this, "Error al cargar contactos: " + e.getMessage());
+        return "";
     }
-}
+
+    private void cargarContactos() {
+        try (Connection conn = Conexion.obtenerConexion()) {
+
+            // Obtener ID del usuario actual
+            String sqlId = "SELECT id FROM usuarios WHERE usuario = ?";
+            PreparedStatement psId = conn.prepareStatement(sqlId);
+            psId.setString(1, usuarioLogueado);
+            ResultSet rsId = psId.executeQuery();
+
+            if (!rsId.next()) {
+                return;
+            }
+
+            int idUsuario = rsId.getInt("id");
+
+            // Obtener contactos
+            String sql = "SELECT u.usuario FROM contactos c "
+                    + "JOIN usuarios u ON c.contacto_id = u.id "
+                    + "WHERE c.usuario_id = ? AND c.estado = 'aceptado'";
+
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setInt(1, idUsuario);
+            ResultSet rs = ps.executeQuery();
+
+            modeloContactos.clear(); // limpiar lista antes
+
+            while (rs.next()) {
+                modeloContactos.addElement(rs.getString("usuario"));
+            }
+
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error al cargar contactos: " + e.getMessage());
+        }
+    }
+
+    private String obtenerCodigoDesdeNombre(String nombre) {
+        try (Connection conn = Conexion.obtenerConexion()) {
+            String sql = "SELECT codigo FROM usuarios WHERE usuario = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, nombre);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                return rs.getString("codigo");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    private String obtenerNombreDesdeCodigo(String codigo) {
+        try (Connection conn = Conexion.obtenerConexion()) {
+            String sql = "SELECT usuario FROM usuarios WHERE codigo = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, codigo);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                return rs.getString("usuario");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return codigo;
+    }
+
+    private void agregarNotificacion(String nombreEmisor, String mensaje) {
+        String hora = java.time.LocalTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+        modeloNotificaciones.addElement(nombreEmisor + " - " + hora + " : " + mensaje);
+    }
+
     @Override
     public void actionPerformed(ActionEvent e) {
         if (e.getSource() == juego) {
             new FrameJuego();
+        }
+        if(e.getSource()==correo){
+            Correo ventanaCorreo=new Correo(usuarioLogueado);
+            ventanaCorreo.setVisible(true);
         }
     }
     /*public static void main(String[] args) {
