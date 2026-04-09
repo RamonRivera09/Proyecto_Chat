@@ -5,58 +5,82 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.util.Set;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
-// Implementamos Runnable para que funcione como un Hilo (Thread) independiente
 public class Manejador_Cliente implements Runnable {
 
     private Socket socket;
-    private BufferedReader entrada; // Para leer lo que envía el usuario
-    private PrintWriter salida;     // Para enviarle cosas a este usuario
-    private Set<PrintWriter> escritores; // La lista de todos los usuarios
+    private BufferedReader entrada;
+    private PrintWriter salida;
+    private Map<String, PrintWriter> usuariosConectados;
+    private String codigoUsuario; // Agregar la variable para almacenar el código de usuario
 
-    // Constructor que recibe la conexión de Servidor.java
-    public Manejador_Cliente(Socket socket, Set<PrintWriter> escritores) {
+    public Manejador_Cliente(Socket socket, Map<String, PrintWriter> usuariosConectados) {
         this.socket = socket;
-        this.escritores = escritores;
+        this.usuariosConectados = usuariosConectados;
     }
 
     @Override
     public void run() {
         try {
-            // 1. Preparamos las herramientas para leer y escribir
             entrada = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
             salida = new PrintWriter(new java.io.OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
 
-            // 2. Agregamos a este cliente a la lista general del servidor
-            // synchronized evita que dos usuarios se agreguen al mismo milisegundo y choquen
-            synchronized (escritores) {
-                escritores.add(salida);
+            // Recibimos el primer mensaje, que es el código de usuario
+            codigoUsuario = entrada.readLine();
+            if (codigoUsuario != null) {
+                synchronized (usuariosConectados) {
+                    usuariosConectados.put(codigoUsuario, salida); // Registramos el código de usuario
+                    System.out.println("Usuario registrado en servidor: " + codigoUsuario);
+                }
+            } else {
+                // Si no se recibe un código válido, cerramos la conexión
+                System.out.println("No se recibió un código de usuario. Desconectando...");
+                socket.close();
+                return;
             }
 
-            // 3. Ciclo infinito: Escuchamos todo el tiempo lo que escriba ESTE cliente
             String mensaje;
             while ((mensaje = entrada.readLine()) != null) {
                 System.out.println("Servidor recibió: " + mensaje);
 
-                // 4. Repartimos el mensaje a TODOS, menos a quien lo envió
-                synchronized (escritores) {
-                    for (PrintWriter escritor : escritores) {
-                        if (escritor != salida) {
-                            escritor.println(mensaje);
+                // Verificamos si es un mensaje de notificación
+                if (mensaje.startsWith("NOTIF||")) {
+                    // Formato: NOTIF||codigoEmisor||codigoReceptor||mensaje
+                    String[] partes = mensaje.split("\\|\\|");
+                    if (partes.length >= 4) {
+                        String codigoReceptor = partes[2];
+                        PrintWriter receptor;
+                        synchronized (usuariosConectados) {
+                            receptor = usuariosConectados.get(codigoReceptor); // Encontramos al receptor
+                        }
+                        if (receptor != null) {
+                            receptor.println(mensaje); // Enviamos la notificación solo al receptor
+                        } else {
+                            System.out.println("Receptor no conectado: " + codigoReceptor);
+                        }
+                    }
+                } else {
+                    // Mensaje general a todos los usuarios conectados, excepto al emisor
+                    synchronized (usuariosConectados) {
+                        for (Map.Entry<String, PrintWriter> entry : usuariosConectados.entrySet()) {
+                            if (!entry.getKey().equals(codigoUsuario)) {
+                                entry.getValue().println(mensaje); // Enviamos el mensaje a todos
+                            }
                         }
                     }
                 }
             }
 
         } catch (IOException e) {
-            System.out.println("Un usuario se desconectó o tuvo un problema de red.");
+            System.out.println("Usuario desconectado: " + codigoUsuario);
         } finally {
-            // 5. Si el cliente cierra el chat, lo quitamos de la lista para no enviarle mensajes a la nada
-            if (salida != null) {
-                synchronized (escritores) {
-                    escritores.remove(salida);
+            // Limpiar usuario de la lista al desconectarse
+            if (codigoUsuario != null) {
+                synchronized (usuariosConectados) {
+                    usuariosConectados.remove(codigoUsuario); // Quitamos al usuario de la lista
+                    System.out.println("Usuario removido: " + codigoUsuario);
                 }
             }
             try {

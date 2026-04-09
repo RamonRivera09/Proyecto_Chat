@@ -1,6 +1,7 @@
 package GUI;
 
 //import Snake.FrameJuego;
+import INICIO_SESION.Conexion;
 import INICIO_SESION.Inicio;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -38,6 +39,12 @@ import java.nio.charset.StandardCharsets;
 import javax.swing.ImageIcon;
 import javax.swing.ListModel;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import javax.swing.DefaultListModel;
+
 public class Chat extends JFrame implements ActionListener {
 
     // --- Variables de Red ---
@@ -62,11 +69,15 @@ public class Chat extends JFrame implements ActionListener {
     private JButton btnBuscar;
 
     private String usuarioLogueado; // Variable para guardar el nombre
+    DefaultListModel<String> modeloContactos = new DefaultListModel<>();
+private DefaultListModel<String> modeloNotificaciones = new DefaultListModel<>();
+private JList<String> listaNotificaciones = new JList<>(modeloNotificaciones);
 
     public Chat(String usuario) {
         this.usuarioLogueado = usuario; // Guardamos el nombre
         configFrame();
         initComponents();
+cargarContactos();
 
         // Opcional: Cambiar el título de la ventana con el nombre
         setTitle("CHARLEMOS - Sesión de: " + usuarioLogueado);
@@ -90,7 +101,7 @@ public class Chat extends JFrame implements ActionListener {
     public void initComponents() {
         pantallaInicial = new JPanel(new BorderLayout());
         PantallaPerfil vistaPerfil = new PantallaPerfil(usuarioLogueado, cardLayout, pContenedor);
-        PantallaActualizar ajuste= new PantallaActualizar(usuarioLogueado, cardLayout, pContenedor);
+        PantallaActualizar ajuste = new PantallaActualizar(usuarioLogueado, cardLayout, pContenedor);
         pContenedor.add(vistaPerfil, "PERFIL");
         pContenedor.add(ajuste, "AJUSTE");
 
@@ -117,18 +128,37 @@ public class Chat extends JFrame implements ActionListener {
             cardLayout.show(pContenedor, "PERFIL");
         });
         Opciones.add(itemVerPerfil);
-        correo=new JMenuItem("Registrar correo");
+JMenuItem notificaciones = new JMenuItem("Notificaciones");
+Opciones.add(notificaciones);
+notificaciones.addActionListener(e -> mostrarNotificaciones());
+        correo = new JMenuItem("Registrar correo");
         correo.addActionListener(this);
         Opciones.add(correo);
         juego = new JMenuItem("Jugar");
         juego.addActionListener(this);
-        contacto=new JMenuItem("Contacto");
-        contacto.addActionListener(e->{
-            AgregarContacto ventanacontacto=new AgregarContacto();
-            ventanacontacto.setVisible(true);});
+        contacto = new JMenuItem("Contacto");
+        contacto.addActionListener(e -> {
+            try (Connection conn = Conexion.obtenerConexion()) {
+                String sql = "SELECT codigo FROM usuarios WHERE usuario = ?";
+                PreparedStatement ps = conn.prepareStatement(sql);
+                ps.setString(1, usuarioLogueado);
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) {
+                    String codigoActual = rs.getString("codigo");
+                    AgregarContacto ventanacontacto = new AgregarContacto(codigoActual, modeloContactos, this);
+                    ventanacontacto.setVisible(true);
+                } else {
+                    JOptionPane.showMessageDialog(this, "Error: no se pudo obtener tu código de usuario");
+                }
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error al conectar con la base de datos: " + ex.getMessage());
+            }
+        });
         Opciones.add(contacto);
-        JMenuItem itemAjustes=new JMenuItem("Ajustes");
-        itemAjustes.addActionListener(e->{cardLayout.show(pContenedor, "AJUSTE");});
+        JMenuItem itemAjustes = new JMenuItem("Ajustes");
+        itemAjustes.addActionListener(e -> {
+            cardLayout.show(pContenedor, "AJUSTE");
+        });
         Opciones.add(itemAjustes);
         Opciones.add(juego);
         Opciones.addSeparator();
@@ -160,12 +190,11 @@ public class Chat extends JFrame implements ActionListener {
         pantallaInicial.add(Separador, BorderLayout.NORTH);
 
         // Lista contactos
-        String[] contactos = {"América", "Alexa", "Ramón", "Erick", "Diego", "Paco", "Justin", "Dani", "Leti", "Zayra", "Linda"};
-        JList<String> listaContactos = new JList<>(contactos);
+        
+        JList<String> listaContactos = new JList<>(modeloContactos);
         listaContactos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         listaContactos.setFont(new Font("Arial", Font.PLAIN, 24));
         listaContactos.setFixedCellHeight(80);
-
         scrollContactos = new JScrollPane(listaContactos);
         pantallaInicial.add(scrollContactos, BorderLayout.CENTER);
 
@@ -316,6 +345,8 @@ public class Chat extends JFrame implements ActionListener {
             socket = new Socket("localhost", 9090);
             entrada = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
             salida = new PrintWriter(new java.io.OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
+ salida.println(usuarioLogueado);  // Enviamos el nombre del usuario logueado
+        System.out.println("Usuario enviado: " + usuarioLogueado);  // Log para verificar
 
             // 2. Creamos un Hilo (Thread) que estará siempre escuchando si llega un mensaje
             Thread hiloEscucha = new Thread(() -> {
@@ -391,7 +422,6 @@ public class Chat extends JFrame implements ActionListener {
         }
     }
 
-    
     public void recibirMensaje(String textoRecibido) {
 
         // Separar texto y fuente
@@ -445,7 +475,6 @@ public class Chat extends JFrame implements ActionListener {
         });
     }
 
-    
     private void cerrarSesion() {
         try {
             // 1. Avisar al servidor o cerrar los flujos
@@ -470,7 +499,133 @@ public class Chat extends JFrame implements ActionListener {
             this.dispose();
         }
     }
+private void mostrarNotificaciones() {
+    JPanel panel = new JPanel(new BorderLayout());
+    panel.add(new JScrollPane(listaNotificaciones), BorderLayout.CENTER);
 
+    JButton btnVolver = new JButton("Volver a Contactos");
+    btnVolver.addActionListener(e -> cardLayout.show(pContenedor, "LISTA"));
+    panel.add(btnVolver, BorderLayout.SOUTH);
+
+    pContenedor.add(panel, "NOTIFICACIONES");
+    cardLayout.show(pContenedor, "NOTIFICACIONES");
+
+    // Doble clic sobre la notificación abre chat
+    listaNotificaciones.addMouseListener(new java.awt.event.MouseAdapter() {
+        public void mouseClicked(java.awt.event.MouseEvent evt) {
+            if (evt.getClickCount() == 2) {
+                int index = listaNotificaciones.locationToIndex(evt.getPoint());
+                if (index >= 0) {
+                    String item = modeloNotificaciones.get(index);
+                    String nombreContacto = item.split(" - ")[0]; // extrae el nombre
+                    abrirChatCon(nombreContacto);
+                }
+            }
+        }
+    });
+}
+private void abrirChatCon(String nombreContacto) {
+    Contactos.setText(nombreContacto);
+    cardLayout.show(pContenedor, "CHAT");
+}
+public void enviarNotificacion(String codigoEmisor, String codigoReceptor, String mensaje) {
+    try (Connection conn = Conexion.obtenerConexion()) {
+
+        // Obtener IDs
+        String sqlId = "SELECT id FROM usuarios WHERE codigo = ?";
+
+        PreparedStatement psE = conn.prepareStatement(sqlId);
+        psE.setString(1, codigoEmisor);
+        ResultSet rsE = psE.executeQuery();
+        int idEmisor = rsE.next() ? rsE.getInt("id") : -1;
+
+        PreparedStatement psR = conn.prepareStatement(sqlId);
+        psR.setString(1, codigoReceptor);
+        ResultSet rsR = psR.executeQuery();
+        int idReceptor = rsR.next() ? rsR.getInt("id") : -1;
+
+        if (idEmisor == -1 || idReceptor == -1) return;
+
+        // Insertar en BD
+        String sqlInsert = "INSERT INTO notificaciones(emisor_id, receptor_id, mensaje) VALUES (?, ?, ?)";
+        PreparedStatement psInsert = conn.prepareStatement(sqlInsert);
+        psInsert.setInt(1, idEmisor);
+        psInsert.setInt(2, idReceptor);
+        psInsert.setString(3, mensaje);
+        psInsert.executeUpdate();
+
+        // 🔥 Mostrar en tiempo real SOLO si soy el receptor
+        String codigoActual = obtenerCodigoUsuarioActual();
+
+        if (codigoReceptor.equals(codigoActual)) {
+            String nombreEmisor = obtenerNombreDesdeCodigo(codigoEmisor, conn);
+            String hora = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+
+            modeloNotificaciones.addElement(nombreEmisor + " - " + hora + " : " + mensaje);
+        }
+
+    } catch (SQLException ex) {
+        JOptionPane.showMessageDialog(this, "Error al enviar notificación: " + ex.getMessage());
+    }
+}
+private String obtenerCodigoUsuarioActual() {
+    try (Connection conn = Conexion.obtenerConexion()) {
+        String sql = "SELECT codigo FROM usuarios WHERE usuario = ?";
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setString(1, usuarioLogueado);
+        ResultSet rs = ps.executeQuery();
+
+        if (rs.next()) {
+            return rs.getString("codigo");
+        }
+    } catch (SQLException e) {
+        e.printStackTrace();
+    }
+    return "";
+}
+private String obtenerNombreDesdeCodigo(String codigo, Connection conn) throws SQLException {
+    String sql = "SELECT usuario FROM usuarios WHERE codigo = ?";
+    PreparedStatement ps = conn.prepareStatement(sql);
+    ps.setString(1, codigo);
+    ResultSet rs = ps.executeQuery();
+
+    if (rs.next()) {
+        return rs.getString("usuario");
+    }
+    return codigo;
+}
+private void cargarContactos() {
+    try (Connection conn = Conexion.obtenerConexion()) {
+
+        // Obtener ID del usuario actual
+        String sqlId = "SELECT id FROM usuarios WHERE usuario = ?";
+        PreparedStatement psId = conn.prepareStatement(sqlId);
+        psId.setString(1, usuarioLogueado);
+        ResultSet rsId = psId.executeQuery();
+
+        if (!rsId.next()) return;
+
+        int idUsuario = rsId.getInt("id");
+
+        // Obtener contactos
+        String sql = "SELECT u.usuario FROM contactos c " +
+                     "JOIN usuarios u ON c.contacto_id = u.id " +
+                     "WHERE c.usuario_id = ? AND c.estado = 'aceptado'";
+
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setInt(1, idUsuario);
+        ResultSet rs = ps.executeQuery();
+
+        modeloContactos.clear(); // limpiar lista antes
+
+        while (rs.next()) {
+            modeloContactos.addElement(rs.getString("usuario"));
+        }
+
+    } catch (SQLException e) {
+        JOptionPane.showMessageDialog(this, "Error al cargar contactos: " + e.getMessage());
+    }
+}
     @Override
     public void actionPerformed(ActionEvent e) {
         if (e.getSource() == juego) {
