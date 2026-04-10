@@ -49,6 +49,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
+import java.io.File;
+import java.nio.file.Files;
+import java.util.Base64;
+import javax.swing.JFileChooser;
 
 public class Chat extends JFrame implements ActionListener {
 
@@ -82,6 +86,7 @@ public class Chat extends JFrame implements ActionListener {
         this.usuarioLogueado = usuario; // Guardamos el nombre
         configFrame();
         initComponents();
+        prepararCarpetaArchivos();
         cargarContactosDesdeBD();
         cargarContactos();
         cargarNotificacionesDesdeBD();
@@ -135,7 +140,7 @@ public class Chat extends JFrame implements ActionListener {
             cardLayout.show(pContenedor, "PERFIL");
         });
         Opciones.add(itemVerPerfil);
-        JMenuItem notificaciones = new JMenuItem("Notificaciones");
+        JMenuItem notificaciones = new JMenuItem("Historial");
         Opciones.add(notificaciones);
         notificaciones.addActionListener(e -> mostrarNotificaciones());
         correo = new JMenuItem("Registrar correo");
@@ -285,7 +290,67 @@ public class Chat extends JFrame implements ActionListener {
         Enviar = new JButton("Enviar");
 
         JButton Zumbido = new JButton("Zumbido");
+        Zumbido.addActionListener(e -> {
+            // 1. Obtenemos el nombre del contacto que está arriba en la pantalla de mensajes
+            String receptorNombre = Contactos.getText();
+
+            // 2. Validamos que realmente haya un chat abierto
+            if (receptorNombre.equals("Selecciona un contacto") || receptorNombre.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Abre un chat para enviar un zumbido.");
+                return;
+            }
+
+            // 3. Obtenemos el código único (USR-XXX) del receptor
+            String codReceptor = obtenerCodigoDesdeNombre(receptorNombre);
+
+            // 4. Enviamos al servidor con el formato de 4 partes: TIPO||EMISOR||RECEPTOR||CONTENIDO
+            if (salida != null) {
+                // Importante: Mandamos el código de quien envía y el código de quien recibe
+                String comando = "ZUMBIDO||" + obtenerCodigoUsuarioActual() + "||" + codReceptor + "||¡ZUMBIDO!";
+                salida.println(comando);
+
+                // Registro local en consola
+                System.out.println("Enviando zumbido a: " + receptorNombre + " (" + codReceptor + ")");
+            }
+        });
         JButton Archivos = new JButton("Archivos");
+        Archivos.addActionListener(e -> {
+            // 1. Identificamos al usuario de la ventana de chat actual
+            String receptorNombre = Contactos.getText();
+            if (receptorNombre.equals("Selecciona un contacto") || receptorNombre.isEmpty()) {
+                javax.swing.JOptionPane.showMessageDialog(this, "Selecciona un contacto primero.");
+                return;
+            }
+
+            JFileChooser selector = new JFileChooser();
+            int resultado = selector.showOpenDialog(this);
+
+            if (resultado == JFileChooser.APPROVE_OPTION) {
+                File archivo = selector.getSelectedFile();
+                try {
+                    // 2. Convertir archivo a Base64
+                    byte[] bytes = java.nio.file.Files.readAllBytes(archivo.toPath());
+                    String archivoBase64 = java.util.Base64.getEncoder().encodeToString(bytes);
+
+                    // 3. Formato para el servidor: FILE || EMISOR || RECEPTOR || NOMBRE:CONTENIDO
+                    String codReceptor = obtenerCodigoDesdeNombre(receptorNombre);
+                    String mensaje = "FILE||" + obtenerCodigoUsuarioActual() + "||" + codReceptor + "||" + archivo.getName() + ":" + archivoBase64;
+
+                    // 4. Enviar por el socket
+                    if (salida != null) {
+                        salida.println(mensaje);
+
+                        // 5. Feedback visual en el chat y guardar en BD
+                        mostrarMensajeEnChat(usuarioLogueado, "📎 Archivo enviado: " + archivo.getName() + "\n(Ruta local: " + archivo.getAbsolutePath() + ")", "Arial", true);
+                        guardarMensajeEnBD(usuarioLogueado, receptorNombre, "📎 Envió un archivo: " + archivo.getName());
+                    }
+
+                } catch (java.io.IOException ex) {
+                    ex.printStackTrace();
+                    javax.swing.JOptionPane.showMessageDialog(this, "Error al procesar el archivo.");
+                }
+            }
+        });
 
         String[] listaEmojis = {"😊", "😂", "❤️", "👍", "😢"};
         emojis = new JComboBox<>(listaEmojis);
@@ -309,7 +374,27 @@ public class Chat extends JFrame implements ActionListener {
         });
 
         // ENVIAR MENSAJE
-        Enviar.addActionListener(e -> enviarMensaje(Mensaje));
+        Enviar.addActionListener(e -> {
+            String texto = Mensaje.getText().trim();
+            String receptorNom = Contactos.getText();
+
+            // IMPORTANTE: Obtener el valor seleccionado del JComboBox
+            String fuenteSeleccionada = (String) fuentes.getSelectedItem();
+
+            if (!texto.isEmpty() && !receptorNom.equals("Selecciona un contacto")) {
+                String codRec = obtenerCodigoDesdeNombre(receptorNom);
+
+                // El formato debe ser: MSG||Emisor||Receptor||Fuente:Mensaje
+                // Verifica que pusiste los ":" entre fuenteSeleccionada y texto
+                String comandoCompleto = "MSG||" + obtenerCodigoUsuarioActual() + "||" + codRec + "||" + fuenteSeleccionada + ":" + texto;
+
+                salida.println(comandoCompleto); // Esto envía el paquete completo al servidor
+
+                mostrarMensajeEnChat(usuarioLogueado, texto, fuenteSeleccionada, true);
+                guardarMensajeEnBD(usuarioLogueado, receptorNom, texto);
+                Mensaje.setText("");
+            }
+        });
         Mensaje.addActionListener(e -> enviarMensaje(Mensaje));
 
         // INFO CONTACTO
@@ -391,6 +476,20 @@ public class Chat extends JFrame implements ActionListener {
 
         cardLayout.show(pContenedor, "LISTA");
     }
+    private String rutaDescargas;
+
+    private void prepararCarpetaArchivos() {
+        String home = System.getProperty("user.home");
+        // Ruta: Documentos/CHARLEMOS_Archivos
+        File carpeta = new File(home + File.separator + "Documents" + File.separator + "CHARLEMOS_Archivos");
+
+        if (!carpeta.exists()) {
+            if (carpeta.mkdirs()) {
+                System.out.println("Directorio de archivos creado: " + carpeta.getAbsolutePath());
+            }
+        }
+        rutaDescargas = carpeta.getAbsolutePath();
+    }
 
     public void conectarAlServidor() {
         try {
@@ -418,19 +517,29 @@ public class Chat extends JFrame implements ActionListener {
                         // Ejecutamos en el hilo de la interfaz (EDT) para evitar errores visuales
                         SwingUtilities.invokeLater(() -> {
                             // ... dentro del thread de escucha ...
+                            // Dentro del while((mensajeRecibido = entrada.readLine()) != null)
                             if (mensajeRecibido.startsWith("MSG||")) {
                                 String[] partes = mensajeRecibido.split("\\|\\|");
                                 if (partes.length >= 4) {
                                     String emisorCod = partes[1];
-                                    String texto = partes[3];
+                                    String contenidoCompleto = partes[3]; // Aquí llega "Courier New:Hola"
                                     String nombreEmisor = obtenerNombreDesdeCodigo(emisorCod);
 
-                                    // Si tengo abierto el chat con esa persona, lo muestro
-                                    if (Contactos.getText().equals(nombreEmisor)) {
-                                        mostrarMensajeEnChat(nombreEmisor, texto, "Arial", false);
+                                    String fuenteARenderizar = "Arial"; // Default
+                                    String textoLimpio = contenidoCompleto;
+
+                                    // VERIFICACIÓN CLAVE: ¿Contiene los dos puntos?
+                                    if (contenidoCompleto.contains(":")) {
+                                        // El limit 2 es para que si el mensaje tiene ":" no se rompa
+                                        String[] subPartes = contenidoCompleto.split(":", 2);
+                                        fuenteARenderizar = subPartes[0]; // "Courier New"
+                                        textoLimpio = subPartes[1];       // "Hola"
                                     }
-                                    // Siempre lanzamos notificación visual
-                                    agregarNotificacion(nombreEmisor, "te envió un mensaje");
+
+                                    if (Contactos.getText().equals(nombreEmisor)) {
+                                        // PASAMOS LA FUENTE EXTRAÍDA
+                                        mostrarMensajeEnChat(nombreEmisor, textoLimpio, fuenteARenderizar, false);
+                                    }
                                 }
                             } else if (mensajeRecibido.startsWith("NOTIF||")) {
                                 String[] partes = mensajeRecibido.split("\\|\\|");
@@ -450,6 +559,54 @@ public class Chat extends JFrame implements ActionListener {
 
                                 // Guardamos una notificación para que el otro la vea al volver
                                 guardarNotificacionOfflineEnBD(nombreReceptor, usuarioLogueado, "te dejó un mensaje pendiente.");
+                                // ... debajo de los otros else if (MSG, NOTIF, etc.) ...
+                            } else if (mensajeRecibido.startsWith("ZUMBIDO||")) {
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                if (partes.length >= 4) {
+                                    String codEmisor = partes[1];
+                                    String nombreEmisor = obtenerNombreDesdeCodigo(codEmisor);
+
+                                    // Lanzar el mensaje de diálogo en cualquier parte de la app
+                                    JOptionPane.showMessageDialog(Chat.this,
+                                            "¡El usuario " + nombreEmisor + " te ha enviado un zumbido!",
+                                            "¡ZUMBIDO!",
+                                            JOptionPane.WARNING_MESSAGE);
+
+                                    // También lo registramos en las notificaciones por si acaso
+                                    agregarNotificacion(nombreEmisor, "te envió un zumbido");
+                                }
+                            } else if (mensajeRecibido.startsWith("FILE||")) {
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                if (partes.length >= 4) {
+                                    String emisorCod = partes[1];
+                                    String nombreEmisor = obtenerNombreDesdeCodigo(emisorCod);
+                                    String contenidoExtra = partes[3]; // trae "nombreArchivo:codigoBase64"
+
+                                    String[] datosArchivo = contenidoExtra.split(":", 2);
+                                    String nombreArchivo = datosArchivo[0];
+                                    String base64Datos = datosArchivo[1];
+
+                                    try {
+                                        // 1. Convertir de nuevo a bytes
+                                        byte[] bytesDescargados = java.util.Base64.getDecoder().decode(base64Datos);
+
+                                        // 2. Ruta final en la carpeta CHARLEMOS_Archivos
+                                        java.io.File archivoDestino = new java.io.File(rutaDescargas + java.io.File.separator + nombreArchivo);
+                                        java.nio.file.Files.write(archivoDestino.toPath(), bytesDescargados);
+
+                                        // 3. Mostrar en el chat del receptor
+                                        if (Contactos.getText().equals(nombreEmisor)) {
+                                            mostrarMensajeEnChat(nombreEmisor, "📂 Archivo recibido y guardado: " + nombreArchivo, "Arial", false);
+                                        }
+
+                                        // Notificación global
+                                        agregarNotificacion(nombreEmisor, "te envió un archivo: " + nombreArchivo);
+                                        javax.swing.JOptionPane.showMessageDialog(Chat.this, "Archivo guardado en: Documents/CHARLEMOS_Archivos");
+
+                                    } catch (java.io.IOException ex) {
+                                        System.err.println("Error al guardar archivo recibido: " + ex.getMessage());
+                                    }
+                                }
                             }
                         });
                     }
@@ -495,47 +652,55 @@ public class Chat extends JFrame implements ActionListener {
         Mensaje.setText("");
     }
 
-    private void mostrarMensajeEnChat(String emisor, String texto, String fuente, boolean esMio) {
-        // 1. Crear el contenedor del mensaje (el renglón)
-        JPanel panelFila = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
-        panelFila.setBackground(new Color(229, 221, 213)); // Color de fondo del chat
-
-        // 2. Crear la burbuja
+    private void mostrarMensajeEnChat(String emisor, String texto, String tipoFuente, boolean esMio) {
+        // 1. Crear el panel contenedor de la burbuja
+        pMensajes.setBackground(new Color(229, 221, 213));
         JPanel burbuja = new JPanel();
         burbuja.setLayout(new BoxLayout(burbuja, BoxLayout.Y_AXIS));
-        burbuja.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
 
-        // Color: Verde si es mío, Blanco si es de otros
-        burbuja.setBackground(esMio ? new Color(220, 248, 198) : Color.WHITE);
+        // Color: Azul claro si es mío, blanco si es del otro
+        burbuja.setBackground(esMio ? new Color(144, 238, 144) : Color.WHITE);
+        burbuja.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+                new javax.swing.border.LineBorder(new Color(200, 200, 200), 1, true),
+                javax.swing.BorderFactory.createEmptyBorder(5, 10, 5, 10)
+        ));
 
-        // 3. Formatear el contenido
-        String hora = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+        // 2. Etiqueta del nombre del emisor (siempre en Arial negrita pequeña)
+        JLabel labelEmisor = new JLabel(emisor);
+        labelEmisor.setFont(new Font("Arial", Font.BOLD, 10));
+        labelEmisor.setForeground(Color.GRAY);
+        labelEmisor.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel lblNombre = new JLabel(esMio ? "Tú" : emisor);
-        lblNombre.setFont(new Font("Arial", Font.BOLD, 10));
-        lblNombre.setForeground(new Color(100, 100, 100));
+        // 3. Etiqueta del contenido del mensaje (AQUÍ APLICAMOS LA FUENTE)
+        // Usamos HTML para que el texto respete el ancho y haga saltos de línea
+        JLabel labelTexto = new JLabel("<html><p style='width: 150px;'>" + texto + "</p></html>");
 
-        JLabel lblTexto = new JLabel(texto);
-        lblTexto.setFont(new Font(fuente, Font.PLAIN, 16));
+        // VALIDACIÓN DE FUENTE: Si por alguna razón tipoFuente llega vacío, usamos Arial
+        if (tipoFuente == null || tipoFuente.isEmpty()) {
+            tipoFuente = "Arial";
+        }
 
-        JLabel lblHora = new JLabel(hora);
-        lblHora.setFont(new Font("Arial", Font.ITALIC, 9));
-        lblHora.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        // Aplicamos la fuente que seleccionó el emisor
+        labelTexto.setFont(new Font(tipoFuente, Font.PLAIN, 14));
+        labelTexto.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // 4. Armar la burbuja y añadirla al chat
-        burbuja.add(lblNombre);
-        burbuja.add(lblTexto);
-        burbuja.add(lblHora);
+        // 4. Agregar elementos a la burbuja
+        burbuja.add(labelEmisor);
+        burbuja.add(javax.swing.Box.createRigidArea(new Dimension(0, 5))); // Espacio pequeño
+        burbuja.add(labelTexto);
 
-        panelFila.add(burbuja);
+        // 5. Alinear la burbuja a la derecha (mío) o izquierda (otro)
+        JPanel contenedorAliniacion = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
+        contenedorAliniacion.setOpaque(false); // Para que no tape el fondo del chat
+        contenedorAliniacion.add(burbuja);
 
-        // 5. Actualizar la interfaz
-        pMensajes.add(panelFila);
+        // 6. Añadir al panel principal de mensajes y refrescar
+        pMensajes.add(contenedorAliniacion);
         pMensajes.revalidate();
         pMensajes.repaint();
 
-        // Auto-scroll hacia abajo
-        SwingUtilities.invokeLater(() -> {
+        // 7. Auto-scroll: Mover la barra de desplazamiento hacia abajo automáticamente
+        javax.swing.SwingUtilities.invokeLater(() -> {
             JScrollBar vertical = scrollMensajes.getVerticalScrollBar();
             vertical.setValue(vertical.getMaximum());
         });
