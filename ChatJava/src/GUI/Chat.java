@@ -314,13 +314,55 @@ public class Chat extends JFrame implements ActionListener {
 
         // INFO CONTACTO
         Info.addActionListener(e -> {
-            String nombre = Contactos.getText();
-            String codigo = "USR-" + nombre.substring(0, 2).toUpperCase() + "01";
+            String nombreSeleccionado = Contactos.getText();
 
-            javax.swing.JOptionPane.showMessageDialog(null,
-                    "Nombre: " + nombre
-                    + "\nEstado: Disponible"
-                    + "\nCódigo: " + codigo);
+            // Si no hay contacto seleccionado, no buscamos nada
+            if (nombreSeleccionado.equals("Selecciona un contacto") || nombreSeleccionado.isEmpty()) {
+                javax.swing.JOptionPane.showMessageDialog(null, "Por favor, selecciona un contacto primero.");
+                return;
+            }
+
+            // Consultamos la base de datos
+            String sql = "SELECT usuario, codigo, correo FROM usuarios WHERE usuario = ?";
+
+            try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+                ps.setString(1, nombreSeleccionado);
+                ResultSet rs = ps.executeQuery();
+
+                if (rs.next()) {
+                    String nombreBD = rs.getString("usuario");
+                    String codigoBD = rs.getString("codigo");
+                    String correoBD = rs.getString("correo");
+
+                    // Validar si el correo es nulo o vacío
+                    if (correoBD == null || correoBD.trim().isEmpty()) {
+                        correoBD = "No registrado";
+                    }
+
+                    // Determinar estado (Si está en el mapa de conectados del servidor)
+                    // Nota: Como estamos en el cliente, el cliente no conoce el mapa 'usuariosConectados' 
+                    // directamente porque eso vive en el Servidor. 
+                    // Por ahora lo pondremos como "Cargado" o puedes dejarlo fijo como "Disponible".
+                    String estado = "Disponible";
+
+                    javax.swing.JOptionPane.showMessageDialog(null,
+                            "📋 INFORMACIÓN DEL CONTACTO\n"
+                            + "------------------------------------------\n"
+                            + "Nombre: " + nombreBD + "\n"
+                            + "Código: " + codigoBD + "\n"
+                            + "Correo: " + correoBD + "\n"
+                            + "Estado: " + estado,
+                            "Detalles de Usuario",
+                            javax.swing.JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    javax.swing.JOptionPane.showMessageDialog(null, "No se encontró información del usuario.");
+                }
+
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+                javax.swing.JOptionPane.showMessageDialog(null, "Error al acceder a la base de datos.");
+            }
         });
 
         // CAMBIO DE PANTALLA

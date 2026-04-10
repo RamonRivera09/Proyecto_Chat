@@ -133,20 +133,23 @@ public class Inicio_Sesion extends JFrame implements ActionListener {
 
                 // Si la conexión fue exitosa (no es nula)
                 if (conn != null) {
-                    String sql = "SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?";
+                    String sql = "SELECT * FROM usuarios WHERE (usuario = ? OR correo = ?) AND contrasena = ?";
                     PreparedStatement pstmt = conn.prepareStatement(sql);
-                    pstmt.setString(1, nombreUsuario);
-                    pstmt.setString(2, password);
+                    pstmt.setString(1, nombreUsuario); // Primer ?: Intenta como nombre de usuario
+                    pstmt.setString(2, nombreUsuario); // Segundo ?: Intenta como correo
+                    pstmt.setString(3, password);      // Tercer ?: La contraseña
 
                     ResultSet rs = pstmt.executeQuery();
 
                     if (rs.next()) {
-                        JOptionPane.showMessageDialog(this, "¡Bienvenido al chat, " + nombreUsuario + "!", "Ingreso Exitoso", JOptionPane.INFORMATION_MESSAGE);
+                        // 🚀 CAMBIO CLAVE: Extraemos el nombre real de la base de datos
+                        // en lugar de usar lo que el usuario escribió en la caja de texto.
+                        String nombreRealUsuario = rs.getString("usuario");
 
-                        // AQUÍ ABRIREMOS LA VENTANA DEL CHAT PRÓXIMAMENTE
-                        // new VentanaChat(nombreUsuario).setVisible(true);
-                        // this.dispose();
-                        new Chat(nombreUsuario);
+                        JOptionPane.showMessageDialog(this, "¡Bienvenido al chat, " + nombreRealUsuario + "!", "Ingreso Exitoso", JOptionPane.INFORMATION_MESSAGE);
+
+                        // Ahora pasamos 'nombreRealUsuario' al Chat para que todo funcione con el nombre correcto
+                        new Chat(nombreRealUsuario);
                         this.dispose();
                     } else {
                         JOptionPane.showMessageDialog(this, "Usuario o contraseña incorrectos.", "Error de Autenticación", JOptionPane.ERROR_MESSAGE);
@@ -156,8 +159,7 @@ public class Inicio_Sesion extends JFrame implements ActionListener {
             } catch (SQLException ex) {
                 JOptionPane.showMessageDialog(this, "Error en la base de datos: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
-            
-            
+
         }
     }
 
