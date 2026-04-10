@@ -71,8 +71,27 @@ public class Manejador_Cliente extends Thread {
 
     // 🚀 AQUÍ ESTÁ EL CÓDIGO QUE ME PREGUNTASTE DÓNDE IBA
     private void procesarMensaje(String mensajeRecibido) {
+        
+        // --- NUEVO: Interceptar la eliminación antes de que corte por longitud ---
+        if (mensajeRecibido.startsWith("ELIMINAR_CONTACTO||")) {
+            String[] partesEliminar = mensajeRecibido.split("\\|\\|");
+            if (partesEliminar.length >= 3) {
+                String nombreQueBorra = partesEliminar[1]; 
+                String codigoDestino = partesEliminar[2];  
+
+                if (usuariosConectados.containsKey(codigoDestino)) {
+                    Manejador_Cliente destino = usuariosConectados.get(codigoDestino);
+                    destino.salida.println("ELIMINAR_CONTACTO||" + nombreQueBorra); 
+                    System.out.println("Servidor: Orden de eliminar chat enviada a [" + codigoDestino + "]");
+                }
+            }
+            return; // Termina aquí para no procesarlo como mensaje normal
+        }
+        // -------------------------------------------------------------------------
+
+        // Aquí sigue tu código normal que ya tenías:
         String[] partes = mensajeRecibido.split("\\|\\|");
-        if (partes.length < 4) return; 
+        if (partes.length < 4) return;
 
         String tipo = partes[0];
         String codigoEmisor = partes[1];

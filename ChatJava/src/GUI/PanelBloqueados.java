@@ -2,14 +2,16 @@ package GUI;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
-public class PanelBloqueados extends JPanel {
+public class PanelBloqueados extends JPanel implements ActionListener{
 
     private JButton btnVolver, btnDesbloquear;
     private JTextField txtBuscar;
     private DefaultListModel<String> modeloBloqueados;
     private JList<String> listaBloqueados;
+    private JButton Buscar;
 
     public PanelBloqueados(ActionListener accionVolver) {
         setLayout(new BorderLayout());
@@ -33,7 +35,7 @@ public class PanelBloqueados extends JPanel {
         // --- PANEL CENTRAL (Lista con Scroll) ---
         modeloBloqueados = new DefaultListModel<>();
         listaBloqueados = new JList<>(modeloBloqueados);
-        listaBloqueados.setFont(new Font("Arial", Font.PLAIN, 14));
+        listaBloqueados.setFont(new Font("Arial", Font.PLAIN, 20));
         
         JScrollPane scroll = new JScrollPane(listaBloqueados);
         scroll.setBorder(null);
@@ -44,8 +46,8 @@ public class PanelBloqueados extends JPanel {
         
         txtBuscar = new JTextField(30);
         btnDesbloquear = new JButton("Desbloquear Selección");
-        JLabel Buscar=new JLabel("Buscar: ");
-        Buscar.setForeground(Color.WHITE);
+        Buscar=new JButton("Buscar");
+        Buscar.addActionListener(this);
         pAbajo.add(Buscar);
         pAbajo.add(txtBuscar);
         pAbajo.add(btnDesbloquear);
@@ -55,4 +57,35 @@ public class PanelBloqueados extends JPanel {
         add(scroll, BorderLayout.CENTER);
         add(pAbajo, BorderLayout.SOUTH);
     }
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if(e.getSource()==Buscar){
+            String busqueda = txtBuscar.getText().trim().toLowerCase();
+
+            if (busqueda.isEmpty()) {
+                JOptionPane.showMessageDialog(null, "Escribe un nombre");
+                return;
+            }
+
+            ListModel<String> modelo = listaBloqueados.getModel();
+            boolean encontrado = false;
+
+            for (int i = 0; i < modelo.getSize(); i++) {
+                String contacto = modelo.getElementAt(i).toLowerCase();
+
+                if (contacto.contains(busqueda)) {
+                    listaBloqueados.setSelectedIndex(i);
+                    listaBloqueados.ensureIndexIsVisible(i);
+                    encontrado = true;
+                    break;
+                }
+            }
+
+            if (!encontrado) {
+                JOptionPane.showMessageDialog(null, "Contacto no registrado");
+            }
+        }
+    }
+    
 }

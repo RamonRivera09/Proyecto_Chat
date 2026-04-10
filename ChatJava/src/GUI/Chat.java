@@ -67,7 +67,7 @@ public class Chat extends JFrame implements ActionListener {
     private JButton Volver, Enviar;
     private JTextField Mensajes;
     private JScrollPane scrollContactos;
-
+    public PanelFavoritos vistaFavoritos;
     // Nuevo
     private JScrollPane scrollMensajes;
     private JComboBox<String> emojis;
@@ -88,6 +88,7 @@ public class Chat extends JFrame implements ActionListener {
         initComponents();
         prepararCarpetaArchivos();
         cargarContactosDesdeBD();
+        cargarFavoritosDesdeBD();
         cargarContactos();
         cargarNotificacionesDesdeBD();
 
@@ -177,7 +178,38 @@ public class Chat extends JFrame implements ActionListener {
 // Acción para que los botones "Volver" funcionen
         ActionListener volverChat = e -> cardLayout.show(pContenedor, "LISTA");
         PanelBloqueados vistaBloqueados = new PanelBloqueados(volverChat);
-        PanelFavoritos vistaFavoritos = new PanelFavoritos(volverChat);
+        vistaFavoritos = new PanelFavoritos(volverChat);
+        // 1. Acción para cuando des CLIC en un nombre de la lista de Favoritos
+        vistaFavoritos.getListaFavoritos().addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent evt) {
+                String seleccionado = vistaFavoritos.getListaFavoritos().getSelectedValue();
+                if (seleccionado != null) {
+                    Contactos.setText(seleccionado); // Poner nombre arriba
+                    pMensajes.removeAll(); // Limpiar mensajes
+                    pMensajes.repaint();
+                    pMensajes.revalidate();
+                    
+                    // Aquí mandas al frente el panel del chat (asumiendo que se llama "VistaChat")
+                    CardLayout cl = (CardLayout) pContenedor.getLayout();
+                    cl.show(pContenedor, "CHAT");
+                    
+                    // TODO: Aquí luego pondremos el método para cargar la conversación de BD
+                }
+            }
+        });
+
+        // 2. Acción para el botón "Quitar de Favoritos" que está en tu PanelFavoritos
+        vistaFavoritos.getBtnEliminarFav().addActionListener(e -> {
+            String seleccionado = vistaFavoritos.getListaFavoritos().getSelectedValue();
+            if (seleccionado != null) {
+                actualizarFavoritoBD(seleccionado, false); // Quitar de BD
+                vistaFavoritos.getModeloFavoritos().removeElement(seleccionado); // Quitar de la vista
+                javax.swing.JOptionPane.showMessageDialog(null, seleccionado + " quitado de favoritos.");
+            } else {
+                javax.swing.JOptionPane.showMessageDialog(null, "Selecciona un contacto primero.");
+            }
+        });
 
 // Registrar en el CardLayout de pPrincipal
         pContenedor.add(vistaBloqueados, "bloqueados");
@@ -422,8 +454,8 @@ public class Chat extends JFrame implements ActionListener {
                 return;
             }
 
-            // Consultamos la base de datos
-            String sql = "SELECT usuario, codigo, correo FROM usuarios WHERE usuario = ?";
+            // Consultamos la base de datos (Agregamos 'id' para poder usarlo en las eliminaciones)
+            String sql = "SELECT id, usuario, codigo, correo FROM usuarios WHERE usuario = ?";
 
             try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
 
@@ -431,6 +463,7 @@ public class Chat extends JFrame implements ActionListener {
                 ResultSet rs = ps.executeQuery();
 
                 if (rs.next()) {
+                    int idContactoBD = rs.getInt("id"); // Rescatamos el ID numérico
                     String nombreBD = rs.getString("usuario");
                     String codigoBD = rs.getString("codigo");
                     String correoBD = rs.getString("correo");
@@ -440,15 +473,13 @@ public class Chat extends JFrame implements ActionListener {
                         correoBD = "No registrado";
                     }
 
-                    // Determinar estado (Si está en el mapa de conectados del servidor)
-                    // Nota: Como estamos en el cliente, el cliente no conoce el mapa 'usuariosConectados' 
-                    // directamente porque eso vive en el Servidor. 
-                    // Por ahora lo pondremos como "Cargado" o puedes dejarlo fijo como "Disponible".
                     String estado = "Disponible";
-                    JButton eliminar = new JButton("Eliminar contacto");
-                    JButton favoritos = new JButton("Agregar a Favoritos");
-                    JButton bloquear = new JButton("Bloquear contacto");
-                    javax.swing.JOptionPane.showMessageDialog(null,
+
+                    // Arreglo con los botones personalizados que aparecerán en el diálogo
+                    Object[] opciones = {"Bloquear contacto", "Agregar a Favoritos", "Eliminar contacto", "Cerrar"};
+
+                    // Mostrar el cuadro de diálogo con opciones
+                    int eleccion = javax.swing.JOptionPane.showOptionDialog(null,
                             "📋 INFORMACIÓN DEL CONTACTO\n"
                             + "------------------------------------------\n"
                             + "Nombre: " + nombreBD + "\n"
@@ -456,7 +487,43 @@ public class Chat extends JFrame implements ActionListener {
                             + "Correo: " + correoBD + "\n"
                             + "Estado: " + estado,
                             "Detalles de Usuario",
-                            javax.swing.JOptionPane.INFORMATION_MESSAGE);
+                            javax.swing.JOptionPane.DEFAULT_OPTION,
+                            javax.swing.JOptionPane.INFORMATION_MESSAGE,
+                            null,
+                            opciones,
+                            opciones[3] // El botón 'Cerrar' será el seleccionado por defecto
+                    );
+
+                    // Ejecutar lógica según el botón presionado
+                    if (eleccion == 0) {
+                        // TODO: Lógica de BLOQUEAR (Pendiente)
+                        javax.swing.JOptionPane.showMessageDialog(null, "Lógica de bloquear en espera de instrucciones...");
+
+                    } else if (eleccion == 1) {
+                // LÓGICA DE FAVORITOS
+                DefaultListModel<String> modFav = vistaFavoritos.getModeloFavoritos();
+                
+                if (!modFav.contains(nombreBD)) {
+                    // 1. Actualizar BD
+                    actualizarFavoritoBD(nombreBD, true);
+                    // 2. Agregar a la lista
+                    modFav.addElement(nombreBD);
+                    javax.swing.JOptionPane.showMessageDialog(null, nombreBD + " añadido a Favoritos ⭐");
+                } else {
+                    javax.swing.JOptionPane.showMessageDialog(null, "Este contacto ya está en tus favoritos.");
+                }
+                    } else if (eleccion == 2) {
+                        // LÓGICA DE ELIMINAR CONTACTO
+                        int confirmar = javax.swing.JOptionPane.showConfirmDialog(null,
+                                "¿Estás seguro de que deseas eliminar permanentemente a " + nombreBD + "?\nEsto borrará el historial de chat para ambos.",
+                                "Confirmar eliminación",
+                                javax.swing.JOptionPane.YES_NO_OPTION,
+                                javax.swing.JOptionPane.WARNING_MESSAGE);
+
+                        if (confirmar == javax.swing.JOptionPane.YES_OPTION) {
+                            eliminarContactoDeTodasPartes(idContactoBD, nombreBD, codigoBD);
+                        }
+                    }
                 } else {
                     javax.swing.JOptionPane.showMessageDialog(null, "No se encontró información del usuario.");
                 }
@@ -601,6 +668,30 @@ public class Chat extends JFrame implements ActionListener {
                                     // También lo registramos en las notificaciones por si acaso
                                     agregarNotificacion(nombreEmisor, "te envió un zumbido");
                                 }
+                            } else // Cuando recibes la notificación de que alguien te borró
+                            if (mensajeRecibido.startsWith("ELIMINAR_CONTACTO||")) {
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                String nombreEmisor = obtenerNombreDesdeCodigo(partes[1]);
+                                if (partes.length >= 2) {
+                                    String nombreABorrar = partes[1]; // Nombre de quien nos acaba de eliminar
+
+                                    // Actualizamos la interfaz gráfica de forma segura
+                                    javax.swing.SwingUtilities.invokeLater(() -> {
+                                        // 1. Lo borramos de la lista visual
+                                        modeloContactos.removeElement(nombreABorrar);
+
+                                        // 2. Si da la casualidad de que teníamos el chat abierto con él, lo cerramos
+                                        if (Contactos.getText().equals(nombreABorrar)) {
+                                            Contactos.setText("Selecciona un contacto");
+                                            pMensajes.removeAll();
+                                            pMensajes.repaint();
+                                            pMensajes.revalidate();
+                                        }
+                                    });
+                                    JOptionPane.showMessageDialog(Chat.this,
+                                            "El usuario " + nombreEmisor + " te ha borrado", "\n",
+                                            JOptionPane.INFORMATION_MESSAGE);
+                                } // Si estás en un ciclo while. Si tu método es tipo void usa: return;
                             } else if (mensajeRecibido.startsWith("FILE||")) {
                                 String[] partes = mensajeRecibido.split("\\|\\|");
                                 if (partes.length >= 4) {
@@ -1017,6 +1108,139 @@ public class Chat extends JFrame implements ActionListener {
             }
         } catch (SQLException e) {
             System.err.println("Error al cargar notificaciones: " + e.getMessage());
+        }
+    }
+
+    private void eliminarContactoDeTodasPartes(int idContactoBD, String nombreContacto, String codigoContactoBD) {
+        try (Connection conn = Conexion.obtenerConexion()) {
+
+            // 1. Obtener TU propio ID numérico en la BD usando tu código (usuarioLogueado)
+            int miId = -1;
+            String sqlMiId = "SELECT id FROM usuarios WHERE usuario = ?";
+            try (PreparedStatement psId = conn.prepareStatement(sqlMiId)) {
+                psId.setString(1, usuarioLogueado);
+                ResultSet rsId = psId.executeQuery();
+                if (rsId.next()) {
+                    miId = rsId.getInt("id");
+                }
+            }
+
+            if (miId == -1) {
+                javax.swing.JOptionPane.showMessageDialog(null, "Error interno: No se pudo identificar tu usuario.");
+                return;
+            }
+
+            // 2. Iniciamos una transacción: esto asegura que si algo falla, no se borre la info a medias
+            conn.setAutoCommit(false);
+
+            // Eliminamos de la tabla CONTACTOS (bidireccional)
+            String delContactos = "DELETE FROM contactos WHERE (usuario_id = ? AND contacto_id = ?) OR (usuario_id = ? AND contacto_id = ?)";
+            try (PreparedStatement ps = conn.prepareStatement(delContactos)) {
+                ps.setInt(1, miId);
+                ps.setInt(2, idContactoBD);
+                ps.setInt(3, idContactoBD);
+                ps.setInt(4, miId);
+                ps.executeUpdate();
+            }
+
+            // Eliminamos de la tabla FAVORITOS
+            String delFavoritos = "DELETE FROM favoritos WHERE (usuario_id = ? AND favorito_id = ?) OR (usuario_id = ? AND favorito_id = ?)";
+            try (PreparedStatement ps = conn.prepareStatement(delFavoritos)) {
+                ps.setInt(1, miId);
+                ps.setInt(2, idContactoBD);
+                ps.setInt(3, idContactoBD);
+                ps.setInt(4, miId);
+                ps.executeUpdate();
+            }
+
+            // Eliminamos de la tabla BLOQUEADOS
+            String delBloqueados = "DELETE FROM bloqueados WHERE (usuario_id = ? AND bloqueado_id = ?) OR (usuario_id = ? AND bloqueado_id = ?)";
+            try (PreparedStatement ps = conn.prepareStatement(delBloqueados)) {
+                ps.setInt(1, miId);
+                ps.setInt(2, idContactoBD);
+                ps.setInt(3, idContactoBD);
+                ps.setInt(4, miId);
+                ps.executeUpdate();
+            }
+
+            // Eliminamos de la tabla MENSAJES (todos los mensajes entre ambos)
+            String delMensajes = "DELETE FROM mensajes WHERE (emisor_id = ? AND receptor_id = ?) OR (emisor_id = ? AND receptor_id = ?)";
+            try (PreparedStatement ps = conn.prepareStatement(delMensajes)) {
+                ps.setInt(1, miId);
+                ps.setInt(2, idContactoBD);
+                ps.setInt(3, idContactoBD);
+                ps.setInt(4, miId);
+                ps.executeUpdate();
+            }
+
+            conn.commit(); // Confirmamos todos los borrados
+            conn.setAutoCommit(true);
+
+            // 3. LIMPIEZA DE LA INTERFAZ VISUAL DEL USUARIO ACTUAL
+            modeloContactos.removeElement(nombreContacto);
+            Contactos.setText("Selecciona un contacto"); // Resetear el label superior
+            pMensajes.removeAll(); // Borrar los mensajes visuales
+            pMensajes.repaint();
+            pMensajes.revalidate();
+
+            /* * Si tus paneles de favoritos/bloqueados tienen los modelos de JList expuestos, 
+         * quítalos visualmente de ahí también. Ejemplo:
+         * modeloFavoritos.removeElement(nombreContacto);
+         * modeloBloqueados.removeElement(nombreContacto);
+             */
+            javax.swing.JOptionPane.showMessageDialog(null, "Contacto y chat eliminados con éxito.");
+
+            // 4. NOTIFICACIÓN AL SERVIDOR PARA EL OTRO USUARIO
+            if (salida != null) {
+                salida.println("ELIMINAR_CONTACTO||" + usuarioLogueado + "||" + codigoContactoBD);
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            javax.swing.JOptionPane.showMessageDialog(null, "Error crítico al intentar eliminar en la base de datos.");
+        }
+    }
+// 1. Método para Guardar/Quitar favoritos en la Base de Datos
+    private void actualizarFavoritoBD(String nombreContacto, boolean esFavorito) {
+        String sql = "UPDATE contactos SET es_favorito = ? "
+                   + "WHERE usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                   + "AND contacto_id = (SELECT id FROM usuarios WHERE usuario = ?)";
+
+        try (Connection conn = Conexion.obtenerConexion(); 
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            
+            ps.setBoolean(1, esFavorito);
+            ps.setString(2, usuarioLogueado);
+            ps.setString(3, nombreContacto);
+            ps.executeUpdate();
+            
+        } catch (SQLException e) {
+            System.err.println("Error al actualizar favorito en BD: " + e.getMessage());
+        }
+    }
+
+    // 2. Método para cargar los favoritos al abrir el programa
+    private void cargarFavoritosDesdeBD() {
+        if (vistaFavoritos == null) return; // Asume que así llamaste a tu instancia de PanelFavoritos
+        
+        DefaultListModel<String> modFav = vistaFavoritos.getModeloFavoritos();
+        modFav.clear();
+
+        String sql = "SELECT u.usuario FROM usuarios u "
+                   + "JOIN contactos c ON u.id = c.contacto_id "
+                   + "WHERE c.usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                   + "AND c.es_favorito = 1";
+
+        try (Connection conn = Conexion.obtenerConexion(); 
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, usuarioLogueado);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                modFav.addElement(rs.getString("usuario"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error al cargar favoritos: " + e.getMessage());
         }
     }
     /*public static void main(String[] args) {

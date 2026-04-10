@@ -2,14 +2,16 @@ package GUI;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
-public class PanelFavoritos extends JPanel {
+public class PanelFavoritos extends JPanel implements ActionListener{
 
     private JButton btnVolver, btnEliminarFav;
     private JTextField txtBuscarFav;
     private DefaultListModel<String> modeloFavoritos;
     private JList<String> listaFavoritos;
+    private JButton BuscarFav;
 
     public PanelFavoritos(ActionListener accionVolver) {
         setLayout(new BorderLayout());
@@ -34,7 +36,7 @@ public class PanelFavoritos extends JPanel {
         // --- PANEL CENTRAL (Scroll idéntico al principal) ---
         modeloFavoritos = new DefaultListModel<>();
         listaFavoritos = new JList<>(modeloFavoritos);
-        listaFavoritos.setFont(new Font("Arial", Font.PLAIN, 16));
+        listaFavoritos.setFont(new Font("Arial", Font.PLAIN, 20));
         
         JScrollPane scroll = new JScrollPane(listaFavoritos);
         scroll.setBorder(null);
@@ -46,9 +48,9 @@ public class PanelFavoritos extends JPanel {
         
         txtBuscarFav = new JTextField(30);
         btnEliminarFav = new JButton("Quitar de Favoritos");
-        JLabel Filtrar=new JLabel("Filtrar favoritos: ");
-        Filtrar.setForeground(Color.WHITE);
-        pAbajo.add(Filtrar);
+        BuscarFav=new JButton("Buscar");
+        BuscarFav.addActionListener(this);
+        pAbajo.add(BuscarFav);
         pAbajo.add(txtBuscarFav);
         pAbajo.add(btnEliminarFav);
 
@@ -56,4 +58,48 @@ public class PanelFavoritos extends JPanel {
         add(scroll, BorderLayout.CENTER);
         add(pAbajo, BorderLayout.SOUTH);
     }
-}
+// --- GETTERS PARA QUE 'CHAT.JAVA' PUEDA MANEJAR LA LISTA ---
+    public DefaultListModel<String> getModeloFavoritos() {
+        return modeloFavoritos;
+    }
+
+    public JList<String> getListaFavoritos() {
+        return listaFavoritos;
+    }
+
+
+    public JButton getBtnEliminarFav() {
+        return btnEliminarFav;
+    }
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if(e.getSource()==BuscarFav){
+            String busqueda = txtBuscarFav.getText().trim().toLowerCase();
+
+            if (busqueda.isEmpty()) {
+                JOptionPane.showMessageDialog(null, "Escribe un nombre");
+                return;
+            }
+
+            ListModel<String> modelo = listaFavoritos.getModel();
+            boolean encontrado = false;
+
+            for (int i = 0; i < modelo.getSize(); i++) {
+                String contacto = modelo.getElementAt(i).toLowerCase();
+
+                if (contacto.contains(busqueda)) {
+                    listaFavoritos.setSelectedIndex(i);
+                    listaFavoritos.ensureIndexIsVisible(i);
+                    encontrado = true;
+                    break;
+                }
+            }
+
+            if (!encontrado) {
+                JOptionPane.showMessageDialog(null, "Contacto no registrado");
+            }
+        }
+    }
+    
+} // <-- Esta es la última llave de tu clase PanelFavoritos
