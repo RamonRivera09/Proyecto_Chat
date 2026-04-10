@@ -73,7 +73,7 @@ public class Chat extends JFrame implements ActionListener {
     private JComboBox<String> emojis;
     private JComboBox<String> fuentes;
 
-    private JMenuItem juego, correo, contacto;
+    private JMenuItem juego, correo, contacto, favoritos, bloqueados;
     private JTextField txtBuscar;
     private JButton btnBuscar;
 
@@ -173,6 +173,21 @@ public class Chat extends JFrame implements ActionListener {
         });
         Opciones.add(itemAjustes);
         Opciones.add(juego);
+
+// Acción para que los botones "Volver" funcionen
+        ActionListener volverChat = e -> cardLayout.show(pContenedor, "LISTA");
+        PanelBloqueados vistaBloqueados = new PanelBloqueados(volverChat);
+        PanelFavoritos vistaFavoritos = new PanelFavoritos(volverChat);
+
+// Registrar en el CardLayout de pPrincipal
+        pContenedor.add(vistaBloqueados, "bloqueados");
+        pContenedor.add(vistaFavoritos, "favoritos");
+        favoritos = new JMenuItem("Favoritos");
+        favoritos.addActionListener(e -> cardLayout.show(pContenedor, "favoritos"));
+        Opciones.add(favoritos);
+        bloqueados = new JMenuItem("Bloqueados");
+        bloqueados.addActionListener(e -> cardLayout.show(pContenedor, "bloqueados"));
+        Opciones.add(bloqueados);
         Opciones.addSeparator();
 
         //Cerrar sesión
@@ -430,7 +445,9 @@ public class Chat extends JFrame implements ActionListener {
                     // directamente porque eso vive en el Servidor. 
                     // Por ahora lo pondremos como "Cargado" o puedes dejarlo fijo como "Disponible".
                     String estado = "Disponible";
-
+                    JButton eliminar = new JButton("Eliminar contacto");
+                    JButton favoritos = new JButton("Agregar a Favoritos");
+                    JButton bloquear = new JButton("Bloquear contacto");
                     javax.swing.JOptionPane.showMessageDialog(null,
                             "📋 INFORMACIÓN DEL CONTACTO\n"
                             + "------------------------------------------\n"
@@ -475,6 +492,7 @@ public class Chat extends JFrame implements ActionListener {
         pContenedor.add(pChat, "CHAT");
 
         cardLayout.show(pContenedor, "LISTA");
+
     }
     private String rutaDescargas;
 
@@ -539,7 +557,12 @@ public class Chat extends JFrame implements ActionListener {
                                     if (Contactos.getText().equals(nombreEmisor)) {
                                         // PASAMOS LA FUENTE EXTRAÍDA
                                         mostrarMensajeEnChat(nombreEmisor, textoLimpio, fuenteARenderizar, false);
+
                                     }
+                                    JOptionPane.showMessageDialog(Chat.this,
+                                            "Nuevo mensaje de " + nombreEmisor + ".\n",
+                                            "Mensaje Recibido",
+                                            JOptionPane.INFORMATION_MESSAGE);
                                 }
                             } else if (mensajeRecibido.startsWith("NOTIF||")) {
                                 String[] partes = mensajeRecibido.split("\\|\\|");
@@ -547,6 +570,9 @@ public class Chat extends JFrame implements ActionListener {
                                     String nombreEmisor = obtenerNombreDesdeCodigo(partes[1]);
                                     agregarNotificacion(nombreEmisor, partes[3]);
                                     cargarContactos(); // Por si nos agregaron
+                                    JOptionPane.showMessageDialog(Chat.this,
+                                            "El usuario " + nombreEmisor + " te ha agregado", "\n",
+                                            JOptionPane.INFORMATION_MESSAGE);
                                 }
                             } else if (mensajeRecibido.startsWith("OFFLINE||")) {
                                 // 🚀 Manejo de usuario desconectado
@@ -683,11 +709,18 @@ public class Chat extends JFrame implements ActionListener {
         // Aplicamos la fuente que seleccionó el emisor
         labelTexto.setFont(new Font(tipoFuente, Font.PLAIN, 14));
         labelTexto.setAlignmentX(Component.LEFT_ALIGNMENT);
+        String horaActual = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+        JLabel labelHora = new JLabel(horaActual);
+        labelHora.setFont(new Font("Arial", Font.ITALIC, 9));
+        labelHora.setForeground(new Color(100, 100, 100)); // Gris oscuro
+        labelHora.setAlignmentX(Component.RIGHT_ALIGNMENT);
 
         // 4. Agregar elementos a la burbuja
         burbuja.add(labelEmisor);
         burbuja.add(javax.swing.Box.createRigidArea(new Dimension(0, 5))); // Espacio pequeño
         burbuja.add(labelTexto);
+        burbuja.add(javax.swing.Box.createRigidArea(new Dimension(0, 2)));
+        burbuja.add(labelHora);
 
         // 5. Alinear la burbuja a la derecha (mío) o izquierda (otro)
         JPanel contenedorAliniacion = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
