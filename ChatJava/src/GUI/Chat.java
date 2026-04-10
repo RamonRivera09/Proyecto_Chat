@@ -68,6 +68,7 @@ public class Chat extends JFrame implements ActionListener {
     private JTextField Mensajes;
     private JScrollPane scrollContactos;
     public PanelFavoritos vistaFavoritos;
+    public PanelBloqueados vistaBloqueados;
     // Nuevo
     private JScrollPane scrollMensajes;
     private JComboBox<String> emojis;
@@ -89,6 +90,7 @@ public class Chat extends JFrame implements ActionListener {
         prepararCarpetaArchivos();
         cargarContactosDesdeBD();
         cargarFavoritosDesdeBD();
+        cargarBloqueadosDesdeBD();
         cargarContactos();
         cargarNotificacionesDesdeBD();
 
@@ -177,7 +179,17 @@ public class Chat extends JFrame implements ActionListener {
 
 // Acción para que los botones "Volver" funcionen
         ActionListener volverChat = e -> cardLayout.show(pContenedor, "LISTA");
-        PanelBloqueados vistaBloqueados = new PanelBloqueados(volverChat);
+        vistaBloqueados = new PanelBloqueados(volverChat);
+        vistaBloqueados.getBtnDesbloquear().addActionListener(e -> {
+            String seleccionado = vistaBloqueados.getListaBloqueados().getSelectedValue();
+            if (seleccionado != null) {
+                actualizarBloqueadoBD(seleccionado, false); // Quitar de BD
+                vistaBloqueados.getModeloBloqueados().removeElement(seleccionado); // Quitar de la lista
+                javax.swing.JOptionPane.showMessageDialog(null, seleccionado + " ha sido desbloqueado 🔓");
+            } else {
+                javax.swing.JOptionPane.showMessageDialog(null, "Selecciona un contacto de la lista para desbloquearlo.");
+            }
+        });
         vistaFavoritos = new PanelFavoritos(volverChat);
         // 1. Acción para cuando des CLIC en un nombre de la lista de Favoritos
         vistaFavoritos.getListaFavoritos().addMouseListener(new MouseAdapter() {
@@ -189,11 +201,11 @@ public class Chat extends JFrame implements ActionListener {
                     pMensajes.removeAll(); // Limpiar mensajes
                     pMensajes.repaint();
                     pMensajes.revalidate();
-                    
+
                     // Aquí mandas al frente el panel del chat (asumiendo que se llama "VistaChat")
                     CardLayout cl = (CardLayout) pContenedor.getLayout();
                     cl.show(pContenedor, "CHAT");
-                    
+
                     // TODO: Aquí luego pondremos el método para cargar la conversación de BD
                 }
             }
@@ -494,24 +506,31 @@ public class Chat extends JFrame implements ActionListener {
                             opciones[3] // El botón 'Cerrar' será el seleccionado por defecto
                     );
 
-                    // Ejecutar lógica según el botón presionado
                     if (eleccion == 0) {
-                        // TODO: Lógica de BLOQUEAR (Pendiente)
-                        javax.swing.JOptionPane.showMessageDialog(null, "Lógica de bloquear en espera de instrucciones...");
+                        // LÓGICA DE BLOQUEAR
+                        DefaultListModel<String> modBloq = vistaBloqueados.getModeloBloqueados();
 
-                    } else if (eleccion == 1) {
-                // LÓGICA DE FAVORITOS
-                DefaultListModel<String> modFav = vistaFavoritos.getModeloFavoritos();
-                
-                if (!modFav.contains(nombreBD)) {
-                    // 1. Actualizar BD
-                    actualizarFavoritoBD(nombreBD, true);
-                    // 2. Agregar a la lista
-                    modFav.addElement(nombreBD);
-                    javax.swing.JOptionPane.showMessageDialog(null, nombreBD + " añadido a Favoritos ⭐");
-                } else {
-                    javax.swing.JOptionPane.showMessageDialog(null, "Este contacto ya está en tus favoritos.");
-                }
+                        if (!modBloq.contains(nombreBD)) {
+                            actualizarBloqueadoBD(nombreBD, true); // Guarda en BD
+                            modBloq.addElement(nombreBD); // Añade a la lista visual de bloqueados
+                            javax.swing.JOptionPane.showMessageDialog(null, nombreBD + " ha sido bloqueado 🚫");
+                        } else {
+                            javax.swing.JOptionPane.showMessageDialog(null, "Este contacto ya está bloqueado.");
+                        }
+                    } // <--- ¡ESTA ES LA LLAVE QUE FALTABA!
+                    else if (eleccion == 1) {
+                        // LÓGICA DE FAVORITOS
+                        DefaultListModel<String> modFav = vistaFavoritos.getModeloFavoritos();
+
+                        if (!modFav.contains(nombreBD)) {
+                            // 1. Actualizar BD
+                            actualizarFavoritoBD(nombreBD, true);
+                            // 2. Agregar a la lista
+                            modFav.addElement(nombreBD);
+                            javax.swing.JOptionPane.showMessageDialog(null, nombreBD + " añadido a Favoritos ⭐");
+                        } else {
+                            javax.swing.JOptionPane.showMessageDialog(null, "Este contacto ya está en tus favoritos.");
+                        }
                     } else if (eleccion == 2) {
                         // LÓGICA DE ELIMINAR CONTACTO
                         int confirmar = javax.swing.JOptionPane.showConfirmDialog(null,
@@ -532,7 +551,8 @@ public class Chat extends JFrame implements ActionListener {
                 ex.printStackTrace();
                 javax.swing.JOptionPane.showMessageDialog(null, "Error al acceder a la base de datos.");
             }
-        });
+        }
+        );
 
         // CAMBIO DE PANTALLA
         listaContactos.addListSelectionListener(e -> {
@@ -597,6 +617,7 @@ public class Chat extends JFrame implements ActionListener {
                 try {
                     String linea;
                     while ((linea = entrada.readLine()) != null) {
+
                         final String mensajeRecibido = linea;
 
                         // Ejecutamos en el hilo de la interfaz (EDT) para evitar errores visuales
@@ -609,6 +630,11 @@ public class Chat extends JFrame implements ActionListener {
                                     String emisorCod = partes[1];
                                     String contenidoCompleto = partes[3]; // Aquí llega "Courier New:Hola"
                                     String nombreEmisor = obtenerNombreDesdeCodigo(emisorCod);
+// Si 'nombreEmisor' es la variable donde guardas quién te mandó el mensaje
+                                    if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(nombreEmisor)) {
+                                        System.out.println("Mensaje bloqueado de: " + nombreEmisor);
+                                        return; // 🚫 IMPORTANTE: 'continue' hace que salte este mensaje y siga esperando el siguiente, ignorando el actual por completo.
+                                    }
 
                                     String fuenteARenderizar = "Arial"; // Default
                                     String textoLimpio = contenidoCompleto;
@@ -635,6 +661,10 @@ public class Chat extends JFrame implements ActionListener {
                                 String[] partes = mensajeRecibido.split("\\|\\|");
                                 if (partes.length >= 4) {
                                     String nombreEmisor = obtenerNombreDesdeCodigo(partes[1]);
+                                    if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(nombreEmisor)) {
+                                        System.out.println("Mensaje bloqueado de: " + nombreEmisor);
+                                        return; // 🚫 IMPORTANTE: 'continue' hace que salte este mensaje y siga esperando el siguiente, ignorando el actual por completo.
+                                    }
                                     agregarNotificacion(nombreEmisor, partes[3]);
                                     cargarContactos(); // Por si nos agregaron
                                     JOptionPane.showMessageDialog(Chat.this,
@@ -658,6 +688,10 @@ public class Chat extends JFrame implements ActionListener {
                                 if (partes.length >= 4) {
                                     String codEmisor = partes[1];
                                     String nombreEmisor = obtenerNombreDesdeCodigo(codEmisor);
+                                    if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(nombreEmisor)) {
+                                        System.out.println("Mensaje bloqueado de: " + nombreEmisor);
+                                        return; // 🚫 IMPORTANTE: 'continue' hace que salte este mensaje y siga esperando el siguiente, ignorando el actual por completo.
+                                    }
 
                                     // Lanzar el mensaje de diálogo en cualquier parte de la app
                                     JOptionPane.showMessageDialog(Chat.this,
@@ -672,6 +706,7 @@ public class Chat extends JFrame implements ActionListener {
                             if (mensajeRecibido.startsWith("ELIMINAR_CONTACTO||")) {
                                 String[] partes = mensajeRecibido.split("\\|\\|");
                                 String nombreEmisor = obtenerNombreDesdeCodigo(partes[1]);
+
                                 if (partes.length >= 2) {
                                     String nombreABorrar = partes[1]; // Nombre de quien nos acaba de eliminar
 
@@ -697,6 +732,10 @@ public class Chat extends JFrame implements ActionListener {
                                 if (partes.length >= 4) {
                                     String emisorCod = partes[1];
                                     String nombreEmisor = obtenerNombreDesdeCodigo(emisorCod);
+                                    if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(nombreEmisor)) {
+                                        System.out.println("Mensaje bloqueado de: " + nombreEmisor);
+                                        return; // 🚫 IMPORTANTE: 'continue' hace que salte este mensaje y siga esperando el siguiente, ignorando el actual por completo.
+                                    }
                                     String contenidoExtra = partes[3]; // trae "nombreArchivo:codigoBase64"
 
                                     String[] datosArchivo = contenidoExtra.split(":", 2);
@@ -739,6 +778,12 @@ public class Chat extends JFrame implements ActionListener {
     }
 
     private void enviarMensaje(JTextField Mensaje) {
+        String contactoActual = Contactos.getText(); // El nombre del chat que tienes abierto
+
+        if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(contactoActual)) {
+            javax.swing.JOptionPane.showMessageDialog(null, "No puedes enviarle mensajes a un contacto bloqueado. Desbloquéalo primero.");
+            return; // 🚫 Corta la acción aquí para que no se envíe nada
+        }
         String texto = Mensaje.getText();
         if (texto.isEmpty()) {
             return;
@@ -760,7 +805,6 @@ public class Chat extends JFrame implements ActionListener {
         // --------------- Enviar al servidor ---------------
         String receptor = Contactos.getText(); // nombre del contacto seleccionado
         String codigoReceptor = obtenerCodigoDesdeNombre(receptor);
-
         if (codigoReceptor != null && salida != null) {
             salida.println("MSG||" + obtenerCodigoUsuarioActual() + "||" + codigoReceptor + "||" + texto);
             guardarMensajeEnBD(usuarioLogueado, receptor, texto);
@@ -1200,19 +1244,19 @@ public class Chat extends JFrame implements ActionListener {
         }
     }
 // 1. Método para Guardar/Quitar favoritos en la Base de Datos
+
     private void actualizarFavoritoBD(String nombreContacto, boolean esFavorito) {
         String sql = "UPDATE contactos SET es_favorito = ? "
-                   + "WHERE usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
-                   + "AND contacto_id = (SELECT id FROM usuarios WHERE usuario = ?)";
+                + "WHERE usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                + "AND contacto_id = (SELECT id FROM usuarios WHERE usuario = ?)";
 
-        try (Connection conn = Conexion.obtenerConexion(); 
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
             ps.setBoolean(1, esFavorito);
             ps.setString(2, usuarioLogueado);
             ps.setString(3, nombreContacto);
             ps.executeUpdate();
-            
+
         } catch (SQLException e) {
             System.err.println("Error al actualizar favorito en BD: " + e.getMessage());
         }
@@ -1220,18 +1264,18 @@ public class Chat extends JFrame implements ActionListener {
 
     // 2. Método para cargar los favoritos al abrir el programa
     private void cargarFavoritosDesdeBD() {
-        if (vistaFavoritos == null) return; // Asume que así llamaste a tu instancia de PanelFavoritos
-        
+        if (vistaFavoritos == null) {
+            return; // Asume que así llamaste a tu instancia de PanelFavoritos
+        }
         DefaultListModel<String> modFav = vistaFavoritos.getModeloFavoritos();
         modFav.clear();
 
         String sql = "SELECT u.usuario FROM usuarios u "
-                   + "JOIN contactos c ON u.id = c.contacto_id "
-                   + "WHERE c.usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
-                   + "AND c.es_favorito = 1";
+                + "JOIN contactos c ON u.id = c.contacto_id "
+                + "WHERE c.usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                + "AND c.es_favorito = 1";
 
-        try (Connection conn = Conexion.obtenerConexion(); 
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
 
             ps.setString(1, usuarioLogueado);
             ResultSet rs = ps.executeQuery();
@@ -1241,6 +1285,50 @@ public class Chat extends JFrame implements ActionListener {
             }
         } catch (SQLException e) {
             System.err.println("Error al cargar favoritos: " + e.getMessage());
+        }
+    }
+// Método para Guardar/Quitar bloqueados en la Base de Datos
+
+    private void actualizarBloqueadoBD(String nombreContacto, boolean esBloqueado) {
+        String sql = "UPDATE contactos SET es_bloqueado = ? "
+                + "WHERE usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                + "AND contacto_id = (SELECT id FROM usuarios WHERE usuario = ?)";
+
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setBoolean(1, esBloqueado);
+            ps.setString(2, usuarioLogueado);
+            ps.setString(3, nombreContacto);
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            System.err.println("Error al actualizar bloqueado en BD: " + e.getMessage());
+        }
+    }
+
+    // Método para cargar los bloqueados al iniciar
+    private void cargarBloqueadosDesdeBD() {
+        if (vistaBloqueados == null) {
+            return; // Asegúrate de usar el nombre correcto de tu variable
+        }
+        DefaultListModel<String> modBloq = vistaBloqueados.getModeloBloqueados();
+        modBloq.clear();
+
+        String sql = "SELECT u.usuario FROM usuarios u "
+                + "JOIN contactos c ON u.id = c.contacto_id "
+                + "WHERE c.usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                + "AND c.es_bloqueado = 1";
+
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, usuarioLogueado);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                modBloq.addElement(rs.getString("usuario"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error al cargar bloqueados: " + e.getMessage());
         }
     }
     /*public static void main(String[] args) {

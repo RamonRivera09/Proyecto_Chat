@@ -57,6 +57,18 @@ public class PanelBloqueados extends JPanel implements ActionListener{
         add(scroll, BorderLayout.CENTER);
         add(pAbajo, BorderLayout.SOUTH);
     }
+// --- GETTERS ---
+    public DefaultListModel<String> getModeloBloqueados() {
+        return modeloBloqueados;
+    }
+
+    public JList<String> getListaBloqueados() {
+        return listaBloqueados;
+    }
+
+    public JButton getBtnDesbloquear() {
+        return btnDesbloquear;
+    }
 
     @Override
     public void actionPerformed(ActionEvent e) {
