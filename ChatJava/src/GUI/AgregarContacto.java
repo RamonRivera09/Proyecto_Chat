@@ -19,7 +19,7 @@ public class AgregarContacto extends JFrame implements ActionListener {
     private String codigoUsuarioActual; // código del usuario logueado
 
     private DefaultListModel<String> modeloContactos;
-    private Chat chat;
+    public Chat chat;
 
     public AgregarContacto(String codigoUsuarioActual, DefaultListModel<String> modeloContactos, Chat chat) {
         this.codigoUsuarioActual = codigoUsuarioActual;
@@ -92,13 +92,34 @@ public class AgregarContacto extends JFrame implements ActionListener {
         }
         return codigo; // fallback
     }
+// 1. EL TRADUCTOR
 
-    @Override
-    public void actionPerformed(ActionEvent e) {
-        if (e.getSource() == volver) {
-            this.dispose();
-        } else if (e.getSource() == agregar) {
-            agregarContacto();
+    public int obtenerIdPorCodigo(String codigo) {
+        String codigoLimpio = codigo.replaceAll("[^a-zA-Z0-9-]", "").trim();
+        String sql = "SELECT id FROM usuarios WHERE codigo = ?";
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, codigoLimpio);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("id");
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error traductor: " + e.getMessage());
+        }
+        return -1;
+    }
+
+// 2. EL GUARDADO EN BD
+    public void registrarAmistadEnBD(int miId, int idContacto) {
+        String sql = "INSERT INTO contactos (usuario_id, contacto_id, estado) VALUES (?, ?, 'aceptado')";
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            // Guardamos la relación
+            ps.setInt(1, miId);
+            ps.setInt(2, idContacto);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println("Aviso BD: " + e.getMessage());
         }
     }
 
@@ -130,7 +151,7 @@ public class AgregarContacto extends JFrame implements ActionListener {
             int idContacto = rs.getInt("id");
 
             // Obtener id del usuario actual
-            String sqlIdActual = "SELECT id FROM usuarios WHERE codigo = ?";
+            String sqlIdActual = "SELECT id, usuario FROM usuarios WHERE codigo = ?"; // <-- AÑADÍ 'usuario' AQUÍ
             PreparedStatement psIdActual = conn.prepareStatement(sqlIdActual);
             psIdActual.setString(1, codigoUsuarioActual);
             ResultSet rsActual = psIdActual.executeQuery();
@@ -139,9 +160,10 @@ public class AgregarContacto extends JFrame implements ActionListener {
                 return;
             }
             int idUsuarioActual = rsActual.getInt("id");
+            String miNombreReal = rsActual.getString("usuario"); // <-- OBTENEMOS TU NOMBRE DE LA BD
 
             // Insertar en contactos: usuario -> contacto
-            String sqlInsert = "INSERT IGNORE INTO contactos (usuario_id, contacto_id, estado) VALUES (?, ?, 'aceptado')";
+            String sqlInsert = "INSERT INTO contactos (usuario_id, contacto_id, estado) VALUES (?, ?, 'aceptado')";
             PreparedStatement psInsert = conn.prepareStatement(sqlInsert);
             psInsert.setInt(1, idUsuarioActual);
             psInsert.setInt(2, idContacto);
@@ -151,11 +173,39 @@ public class AgregarContacto extends JFrame implements ActionListener {
             psInsert.setInt(1, idContacto);
             psInsert.setInt(2, idUsuarioActual);
             psInsert.executeUpdate();
-            String nombreNuevoContacto = obtenerNombreDesdeCodigo(codigoIngresado, conn); // obtiene nombre del usuario agregado
-            modeloContactos.addElement(nombreNuevoContacto); // actualiza la lista de contactos en la ventana actual
 
-            // Llamada a método de notificación en Chat
-            chat.enviarNotificacion(codigoUsuarioActual, codigoIngresado, "te ha agregado como contacto");
+            String nombreNuevoContacto = obtenerNombreDesdeCodigo(codigoIngresado, conn);
+            modeloContactos.addElement(nombreNuevoContacto);
+
+            // =================================================================
+            // 💾 1. AÑADE ESTO: GUARDAR NOTIFICACIÓN EN LA BASE DE DATOS
+            // =================================================================
+            String hora = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+            String notificacionCompleta = miNombreReal + " - " + hora + " : te ha agregado";
+            
+            String sqlNotif = "INSERT INTO notificaciones (receptor_id, contenido) VALUES (?, ?)";
+            PreparedStatement psNotif = conn.prepareStatement(sqlNotif);
+            psNotif.setInt(1, idContacto); 
+            psNotif.setString(2, notificacionCompleta);
+            psNotif.executeUpdate();
+
+            // =================================================================
+            // 🚀 AQUÍ INTEGRAMOS EL AVISO POR SOCKET CON EL FORMATO CORRECTO
+            // =================================================================
+            if (chat.salida != null) {
+                String comando = "NOTIF||" + codigoUsuarioActual + "||" + codigoIngresado + "||" + miNombreReal + " te ha agregado";
+                chat.salida.println(comando);
+            }
+
+            // =================================================================
+            // 🚀 AQUÍ INTEGRAMOS EL AVISO POR SOCKET CON EL FORMATO CORRECTO
+            // =================================================================
+            // Si tu clase Chat tiene el PrintWriter 'salida' público o accesible:
+            if (chat.salida != null) {
+                String comando = "NOTIF||" + codigoUsuarioActual + "||" + codigoIngresado + "||" + miNombreReal + " te ha agregado";
+                chat.salida.println(comando);
+            }
+            // =================================================================
 
             // Después de insertar en contactos
             JOptionPane.showMessageDialog(this, "Contacto agregado correctamente");
@@ -165,5 +215,21 @@ public class AgregarContacto extends JFrame implements ActionListener {
             JOptionPane.showMessageDialog(this, "Error al agregar contacto: " + ex.getMessage());
             ex.printStackTrace();
         }
+    }
+
+    @Override
+
+    public void actionPerformed(ActionEvent e) {
+
+        if (e.getSource() == volver) {
+
+            this.dispose();
+
+        } else if (e.getSource() == agregar) {
+
+            agregarContacto();
+
+        }
+
     }
 }

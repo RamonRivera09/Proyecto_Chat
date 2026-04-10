@@ -55,7 +55,7 @@ public class Chat extends JFrame implements ActionListener {
     // --- Variables de Red ---
     private Socket socket;
     private BufferedReader entrada; // Para escuchar al servidor
-    private PrintWriter salida;     // Para enviarle mensajes al servidor
+    public PrintWriter salida;     // Para enviarle mensajes al servidor
     private CardLayout cardLayout;
     private JPanel pContenedor, pBuscar, pantallaInicial, Separador, pChat, pChatInput, cabeceraChat, pMensajes;
     private JLabel MiPerfil, Titulo, Contactos;
@@ -82,7 +82,9 @@ public class Chat extends JFrame implements ActionListener {
         this.usuarioLogueado = usuario; // Guardamos el nombre
         configFrame();
         initComponents();
+        cargarContactosDesdeBD();
         cargarContactos();
+        cargarNotificacionesDesdeBD();
 
         // Opcional: Cambiar el título de la ventana con el nombre
         setTitle("CHARLEMOS - Sesión de: " + usuarioLogueado);
@@ -327,6 +329,11 @@ public class Chat extends JFrame implements ActionListener {
                 String seleccionado = listaContactos.getSelectedValue();
                 if (seleccionado != null) {
                     Contactos.setText(seleccionado);
+
+                    // 🚀 REEMPLAZA EL REMOVEALL() POR ESTO:
+                    cargarHistorialMensajes(seleccionado);
+                    // -------------------------------------------------------------
+
                     cardLayout.show(pContenedor, "CHAT");
                 }
             }
@@ -368,28 +375,39 @@ public class Chat extends JFrame implements ActionListener {
 
                         // Ejecutamos en el hilo de la interfaz (EDT) para evitar errores visuales
                         SwingUtilities.invokeLater(() -> {
+                            // ... dentro del thread de escucha ...
                             if (mensajeRecibido.startsWith("MSG||")) {
-                                // Formato: MSG||EMISOR||RECEPTOR||CONTENIDO
                                 String[] partes = mensajeRecibido.split("\\|\\|");
                                 if (partes.length >= 4) {
-                                    String nombreEmisor = obtenerNombreDesdeCodigo(partes[1]);
-                                    String contenido = partes[3];
-                                    // Usamos el método de las burbujas
-                                    mostrarMensajeEnChat(nombreEmisor, contenido, "Arial", false);
+                                    String emisorCod = partes[1];
+                                    String texto = partes[3];
+                                    String nombreEmisor = obtenerNombreDesdeCodigo(emisorCod);
+
+                                    // Si tengo abierto el chat con esa persona, lo muestro
+                                    if (Contactos.getText().equals(nombreEmisor)) {
+                                        mostrarMensajeEnChat(nombreEmisor, texto, "Arial", false);
+                                    }
+                                    // Siempre lanzamos notificación visual
+                                    agregarNotificacion(nombreEmisor, "te envió un mensaje");
                                 }
                             } else if (mensajeRecibido.startsWith("NOTIF||")) {
-                                // Formato: NOTIF||EMISOR||RECEPTOR||MENSAJE
                                 String[] partes = mensajeRecibido.split("\\|\\|");
                                 if (partes.length >= 4) {
                                     String nombreEmisor = obtenerNombreDesdeCodigo(partes[1]);
-                                    String accion = partes[3];
-                                    agregarNotificacion(nombreEmisor, accion);
-
-                                    // Opcional: Si la notificación es que te agregaron, 
-                                    // refrescamos la lista de contactos automáticamente
-                                    cargarContactos();
-                                    JOptionPane.showMessageDialog(this, nombreEmisor + " " + accion);
+                                    agregarNotificacion(nombreEmisor, partes[3]);
+                                    cargarContactos(); // Por si nos agregaron
                                 }
+                            } else if (mensajeRecibido.startsWith("OFFLINE||")) {
+                                // 🚀 Manejo de usuario desconectado
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                String nombreReceptor = obtenerNombreDesdeCodigo(partes[1]);
+
+                                JOptionPane.showMessageDialog(Chat.this,
+                                        "El usuario " + nombreReceptor + " está desconectado.\nEl mensaje se guardó en su historial.",
+                                        "Usuario Offline", JOptionPane.INFORMATION_MESSAGE);
+
+                                // Guardamos una notificación para que el otro la vea al volver
+                                guardarNotificacionOfflineEnBD(nombreReceptor, usuarioLogueado, "te dejó un mensaje pendiente.");
                             }
                         });
                     }
@@ -429,6 +447,7 @@ public class Chat extends JFrame implements ActionListener {
 
         if (codigoReceptor != null && salida != null) {
             salida.println("MSG||" + obtenerCodigoUsuarioActual() + "||" + codigoReceptor + "||" + texto);
+            guardarMensajeEnBD(usuarioLogueado, receptor, texto);
         }
 
         Mensaje.setText("");
@@ -630,10 +649,76 @@ public class Chat extends JFrame implements ActionListener {
         return codigo;
     }
 
+    // --- 1. SE ARREGLÓ PARA QUE GUARDE EN LA BASE DE DATOS ---
     private void agregarNotificacion(String nombreEmisor, String mensaje) {
-        String hora = java.time.LocalTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
-        modeloNotificaciones.addElement(nombreEmisor + " - " + hora + " : " + mensaje);
+        String hora = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+        String contenidoCompleto = nombreEmisor + " - " + hora + " : " + mensaje;
+
+        // Lo mostramos en pantalla
+        modeloNotificaciones.addElement(contenidoCompleto);
+
+        // LO GUARDAMOS EN LA BASE DE DATOS PARA QUE NO SE BORRE
+        String sql = "INSERT INTO notificaciones (receptor_id, contenido) VALUES ((SELECT id FROM usuarios WHERE usuario = ?), ?)";
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, usuarioLogueado);
+            ps.setString(2, contenidoCompleto);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println("Error al guardar notificación: " + e.getMessage());
+        }
+    }
+
+    private void guardarMensajeEnBD(String emisor, String receptor, String contenido) {
+        String sql = "INSERT INTO mensajes (emisor_id, receptor_id, contenido) VALUES ("
+                + "(SELECT id FROM usuarios WHERE usuario = ?), "
+                + "(SELECT id FROM usuarios WHERE usuario = ?), ?)";
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, emisor);
+            ps.setString(2, receptor);
+            ps.setString(3, contenido);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void guardarNotificacionOfflineEnBD(String receptorNom, String emisorNom, String accion) {
+        String hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
+        String contenido = emisorNom + " - " + hora + " : " + accion;
+
+        String sql = "INSERT INTO notificaciones (receptor_id, contenido) VALUES "
+                + "((SELECT id FROM usuarios WHERE usuario = ?), ?)";
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, receptorNom);
+            ps.setString(2, contenido);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void cargarHistorialMensajes(String contactoNombre) {
+        pMensajes.removeAll();
+        String sql = "SELECT m.contenido, u_e.usuario as emisor_nom FROM mensajes m "
+                + "JOIN usuarios u_e ON m.emisor_id = u_e.id "
+                + "JOIN usuarios u_r ON m.receptor_id = u_r.id "
+                + "WHERE (u_e.usuario = ? AND u_r.usuario = ?) OR (u_e.usuario = ? AND u_r.usuario = ?) "
+                + "ORDER BY m.fecha ASC";
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, usuarioLogueado);
+            ps.setString(2, contactoNombre);
+            ps.setString(3, contactoNombre);
+            ps.setString(4, usuarioLogueado);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                boolean esMio = rs.getString("emisor_nom").equals(usuarioLogueado);
+                mostrarMensajeEnChat(rs.getString("emisor_nom"), rs.getString("contenido"), "Arial", esMio);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        pMensajes.revalidate();
+        pMensajes.repaint();
     }
 
     @Override
@@ -641,9 +726,57 @@ public class Chat extends JFrame implements ActionListener {
         if (e.getSource() == juego) {
             new FrameJuego();
         }
-        if(e.getSource()==correo){
-            Correo ventanaCorreo=new Correo(usuarioLogueado);
+        if (e.getSource() == correo) {
+            Correo ventanaCorreo = new Correo(usuarioLogueado);
             ventanaCorreo.setVisible(true);
+        }
+    }
+
+    private void cargarContactosDesdeBD() {
+        // 1. Limpiamos la lista actual para no duplicar si se recarga
+        modeloContactos.clear();
+
+        String sql = "SELECT u.usuario FROM contactos c "
+                + "JOIN usuarios u ON c.contacto_id = u.id "
+                + "WHERE c.usuario_id = (SELECT id FROM usuarios WHERE codigo = ?) "
+                + "AND c.estado = 'aceptado'";
+
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, usuarioLogueado); // usuarioLogueado es tu código (USR-XXX)
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                String nombreContacto = rs.getString("usuario");
+                modeloContactos.addElement(nombreContacto);
+            }
+            System.out.println("Contactos cargados desde BD para: " + usuarioLogueado);
+
+        } catch (SQLException e) {
+            System.err.println("Error al cargar contactos: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void cargarNotificacionesDesdeBD() {
+        modeloNotificaciones.clear();
+
+        // Buscamos las notificaciones donde tú eres el receptor
+        String sql = "SELECT contenido FROM notificaciones "
+                + "WHERE receptor_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                + "ORDER BY fecha ASC";
+
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, usuarioLogueado);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                // Agregamos cada aviso directamente a la lista visual
+                modeloNotificaciones.addElement(rs.getString("contenido"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error al cargar notificaciones: " + e.getMessage());
         }
     }
     /*public static void main(String[] args) {
