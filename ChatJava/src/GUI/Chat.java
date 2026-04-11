@@ -485,15 +485,6 @@ public class Chat extends JFrame implements ActionListener {
             String texto = Mensaje.getText().trim();
             String receptorNom = Contactos.getText();// El nombre de la persona en el chat abierto
 
-        // 1er Candado: ¿Yo lo tengo bloqueado a él?
-        if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(receptorNom)) {
-            javax.swing.JOptionPane.showMessageDialog(null, 
-                "Tienes a " + receptorNom + " bloqueado.\nDesbloquéalo primero para interactuar.", 
-                "Acción Denegada", 
-                javax.swing.JOptionPane.WARNING_MESSAGE);
-            return; // Corta la ejecución
-        }
-
         // 2do Candado: ¿Él me tiene bloqueado a mí? (AQUÍ ESTÁ LA MAGIA QUE PEDISTE)
         if (meTieneBloqueado(receptorNom)) {
             javax.swing.JOptionPane.showMessageDialog(null, 
