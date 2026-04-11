@@ -5,61 +5,110 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.util.Set;
+import java.nio.charset.StandardCharsets;
+import java.io.OutputStreamWriter;
+import java.util.HashMap;
 
-// Implementamos Runnable para que funcione como un Hilo (Thread) independiente
-public class Manejador_Cliente implements Runnable {
-    
+public class Manejador_Cliente extends Thread {
+
     private Socket socket;
-    private BufferedReader entrada; // Para leer lo que envía el usuario
-    private PrintWriter salida;     // Para enviarle cosas a este usuario
-    private Set<PrintWriter> escritores; // La lista de todos los usuarios
+    public PrintWriter salida;
+    private BufferedReader entrada;
+    private String codigoUsuario; // Usaremos esta variable para saber que guarda el CÓDIGO
 
-    // Constructor que recibe la conexión de Servidor.java
-    public Manejador_Cliente(Socket socket, Set<PrintWriter> escritores) {
+    // Mapa de todos los clientes conectados (Llave: Código, Valor: Manejador)
+    public static HashMap<String, Manejador_Cliente> usuariosConectados = new HashMap<>();
+
+    public Manejador_Cliente(Socket socket) {
         this.socket = socket;
-        this.escritores = escritores;
+        try {
+            entrada = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            salida = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
-    @Override
+   @Override
     public void run() {
         try {
-            // 1. Preparamos las herramientas para leer y escribir
-            entrada = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            salida = new PrintWriter(socket.getOutputStream(), true);
-
-            // 2. Agregamos a este cliente a la lista general del servidor
-            // synchronized evita que dos usuarios se agreguen al mismo milisegundo y choquen
-            synchronized (escritores) {
-                escritores.add(salida);
-            }
-
-            // 3. Ciclo infinito: Escuchamos todo el tiempo lo que escriba ESTE cliente
-            String mensaje;
-            while ((mensaje = entrada.readLine()) != null) {
-                System.out.println("Servidor recibió: " + mensaje);
-
-                // 4. Repartimos el mensaje a TODOS los clientes conectados
-                synchronized (escritores) {
-                    for (PrintWriter escritor : escritores) {
-                        escritor.println(mensaje);
-                    }
+            // 1️⃣ Recibir CÓDIGO de usuario y registrar
+            codigoUsuario = entrada.readLine(); 
+            if (codigoUsuario != null) {
+                // Eliminar el BOM y caracteres invisibles
+                if (codigoUsuario.startsWith("\uFEFF")) {
+                    codigoUsuario = codigoUsuario.substring(1);
                 }
+                codigoUsuario = codigoUsuario.replaceAll("[^a-zA-Z0-9-]", "").trim();
+                
+                usuariosConectados.put(codigoUsuario, this);
+                System.out.println("DEBUG: Servidor registró a: [" + codigoUsuario + "]");
             }
-            
+
+            // 2️⃣ Escuchar mensajes infinitamente
+            String mensajeRecibido;
+            while ((mensajeRecibido = entrada.readLine()) != null) {
+                procesarMensaje(mensajeRecibido);
+            }
+
         } catch (IOException e) {
-            System.out.println("Un usuario se desconectó o tuvo un problema de red.");
+            System.out.println(codigoUsuario + " se ha desconectado de forma abrupta.");
         } finally {
-            // 5. Si el cliente cierra el chat, lo quitamos de la lista para no enviarle mensajes a la nada
-            if (salida != null) {
-                synchronized (escritores) {
-                    escritores.remove(salida);
-                }
+            // 3️⃣ Limpiar al desconectarse
+            if (codigoUsuario != null) {
+                usuariosConectados.remove(codigoUsuario);
+                System.out.println("Usuario eliminado del mapa: [" + codigoUsuario + "]");
             }
             try {
-                socket.close(); // Cerramos la conexión
-            } catch (IOException e) {
-                e.printStackTrace();
+                if (entrada != null) entrada.close();
+                if (salida != null) salida.close();
+                if (socket != null) socket.close();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
+
+    // 🚀 AQUÍ ESTÁ EL CÓDIGO QUE ME PREGUNTASTE DÓNDE IBA
+    private void procesarMensaje(String mensajeRecibido) {
+        
+        // --- NUEVO: Interceptar la eliminación antes de que corte por longitud ---
+        if (mensajeRecibido.startsWith("ELIMINAR_CONTACTO||")) {
+            String[] partesEliminar = mensajeRecibido.split("\\|\\|");
+            if (partesEliminar.length >= 3) {
+                String nombreQueBorra = partesEliminar[1]; 
+                String codigoDestino = partesEliminar[2];  
+
+                if (usuariosConectados.containsKey(codigoDestino)) {
+                    Manejador_Cliente destino = usuariosConectados.get(codigoDestino);
+                    destino.salida.println("ELIMINAR_CONTACTO||" + nombreQueBorra); 
+                    System.out.println("Servidor: Orden de eliminar chat enviada a [" + codigoDestino + "]");
+                }
+            }
+            return; // Termina aquí para no procesarlo como mensaje normal
+        }
+        // -------------------------------------------------------------------------
+
+        // Aquí sigue tu código normal que ya tenías:
+        String[] partes = mensajeRecibido.split("\\|\\|");
+        if (partes.length < 4) return;
+
+        String tipo = partes[0];
+        String codigoEmisor = partes[1];
+        String codigoReceptor = partes[2].replaceAll("[^a-zA-Z0-9-]", "").trim(); 
+        String contenido = partes[3];
+
+        if (usuariosConectados.containsKey(codigoReceptor)) {
+            Manejador_Cliente destino = usuariosConectados.get(codigoReceptor);
+            destino.salida.println(mensajeRecibido); 
+            System.out.println("Servidor: [" + tipo + "] entregado a [" + codigoReceptor + "]");
+        } else {
+            System.out.println("Servidor: Receptor [" + codigoReceptor + "] offline.");
+            
+            // 🚀 Avisar al emisor que el receptor no está conectado
+            if (usuariosConectados.containsKey(codigoEmisor)) {
+                Manejador_Cliente origen = usuariosConectados.get(codigoEmisor);
+                origen.salida.println("OFFLINE||" + codigoReceptor);
             }
         }
     }

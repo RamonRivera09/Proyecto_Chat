@@ -1,12 +1,12 @@
--- 1. Creamos la base de datos
-CREATE DATABASE chat_app;
-
--- 2. Le decimos a MySQL que use esa base de datos
+CREATE database chat_app;
 USE chat_app;
-
--- 3. Creamos la tabla de usuarios
 CREATE TABLE usuarios (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    usuario VARCHAR(50) NOT NULL UNIQUE,
-    contrasena VARCHAR(255) NOT NULL
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario VARCHAR(50) NOT NULL UNIQUE,
+  contrasena VARCHAR(255) NOT NULL,
+  foto VARCHAR(255) NULL,
+  codigo VARCHAR(100) NOT NULL UNIQUE,
+  correo VARCHAR(150) NULL,
+  estado VARCHAR(50) NOT NULL,
+  conectado VARCHAR(50) NOT NULL
 );
