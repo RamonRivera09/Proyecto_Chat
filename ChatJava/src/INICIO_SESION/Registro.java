@@ -1,6 +1,7 @@
 package INICIO_SESION;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -19,6 +20,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import javax.swing.ImageIcon;
 import javax.swing.JOptionPane;
 
 public class Registro extends JFrame implements ActionListener {
@@ -32,13 +34,14 @@ public class Registro extends JFrame implements ActionListener {
     public Registro() {
         configFrame();
         initComponents();
+	this.setIconImage(new ImageIcon(getClass().getResource("/IMAGENES/Logo_Chat.jpg")).getImage());
         setVisible(true);
     }
 
     public void configFrame() {
         setSize(new Dimension(400, 400));
         setLocationRelativeTo(null);
-        setTitle("Registro al Chat");
+        setTitle("CHARLEMOS-Registro");
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
@@ -47,6 +50,7 @@ public class Registro extends JFrame implements ActionListener {
     public void initComponents() {
         // Creamos un solo panel y le asignamos GridBagLayout
         central = new JPanel();
+        central.setBackground(new Color(229, 221, 213));
         central.setLayout(new GridBagLayout());
 
         // GridBagConstraints nos permite controlar la posición y márgenes
@@ -94,6 +98,7 @@ public class Registro extends JFrame implements ActionListener {
 
         //7. Crear Panel para los botones
         sur = new JPanel();
+        sur.setBackground(new Color(200, 162, 200));
         sur.setLayout(new BorderLayout());
 
         //8. Crear botón atrás
@@ -129,6 +134,11 @@ public class Registro extends JFrame implements ActionListener {
             String pass1 = new String(contra1.getPassword());
             String pass2 = new String(contra2.getPassword());
 
+            // Generar código automático
+            String codigo = "USR-"
+                    + nombreUsuario.substring(0, Math.min(2, nombreUsuario.length())).toUpperCase()
+                    + (int) (Math.random() * (999 - 1) + 1);
+
             // Validar campos vacíos
             if (nombreUsuario.isEmpty() || pass1.isEmpty() || pass2.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Por favor, llena todos los campos.", "Campos vacíos", JOptionPane.WARNING_MESSAGE);
@@ -141,33 +151,36 @@ public class Registro extends JFrame implements ActionListener {
                 return;
             }
 
-            // Usamos nuestra nueva clase ConexionDB
             try (Connection conn = Conexion.obtenerConexion()) {
 
-                // Si la conexión fue exitosa (no es nula)
                 if (conn != null) {
-                    String sql = "INSERT INTO usuarios (usuario, contrasena) VALUES (?, ?)";
+                    String sql = "INSERT INTO usuarios (usuario, contrasena, codigo, estado, conectado) VALUES (?, ?, ?, ?, ?)";
                     PreparedStatement pstmt = conn.prepareStatement(sql);
+
                     pstmt.setString(1, nombreUsuario);
                     pstmt.setString(2, pass1);
+                    pstmt.setString(3, codigo);
+                    pstmt.setString(4, "Disponible");
+                    pstmt.setString(5, "Conectado");
 
-                    pstmt.executeUpdate(); // Ejecutamos el guardado
+                    pstmt.executeUpdate();
 
                     JOptionPane.showMessageDialog(this, "¡Usuario registrado con éxito!");
 
-                    // Limpiamos los campos
+                    // Limpiar campos
                     user.setText("");
                     contra1.setText("");
                     contra2.setText("");
                 }
+
             } catch (SQLException ex) {
-                // El código 1062 en MySQL significa "Duplicate entry" (Entrada duplicada)
                 if (ex.getErrorCode() == 1062) {
-                    JOptionPane.showMessageDialog(this, "Ese nombre de usuario ya está en uso.", "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Usuario o código ya existente.", "Error", JOptionPane.ERROR_MESSAGE);
                 } else {
                     JOptionPane.showMessageDialog(this, "Error en la base de datos: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
+
             new Inicio();
             this.dispose();
         }
