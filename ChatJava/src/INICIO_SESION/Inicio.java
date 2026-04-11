@@ -1,13 +1,16 @@
 package INICIO_SESION;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Image;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -18,18 +21,19 @@ public class Inicio extends JFrame implements ActionListener {
     
     private JLabel bienvenida;
     private JButton registrar, iniciar;
-    private JPanel panelCentral;
+    private JPanel panelCentral, panelPrimero;
     
     public Inicio() {
         configFrame();
         initComponents();
+        this.setIconImage(new ImageIcon(getClass().getResource("/IMAGENES/Logo_Chat.jpg")).getImage());
         setVisible(true);
     }
     
     public void configFrame() {
         setSize(new Dimension(400, 400));
         setLocationRelativeTo(null);
-        setTitle("Inicio del Chat");
+        setTitle("Charlemos-Inicio");
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         // El JFrame mantiene BorderLayout, lo cual está perfecto
@@ -38,8 +42,13 @@ public class Inicio extends JFrame implements ActionListener {
     
     public void initComponents() {
         // Creamos un solo panel y le asignamos GridBagLayout
+        panelPrimero=new JPanel();
+        panelPrimero.setLayout(new BorderLayout());
+        panelPrimero.setBackground(new Color(200, 162, 200));
         panelCentral = new JPanel();
         panelCentral.setLayout(new GridBagLayout());
+        panelCentral.setBackground(new Color(229, 221, 213));
+        
 
         // GridBagConstraints nos permite controlar la posición y márgenes
         GridBagConstraints gbc = new GridBagConstraints();
@@ -49,17 +58,20 @@ public class Inicio extends JFrame implements ActionListener {
         gbc.insets = new Insets(10, 0, 10, 0);
 
         // 1. Etiqueta de Bienvenida
-        bienvenida = new JLabel("Bienvenido al Chat.", JLabel.CENTER);
+        bienvenida = new JLabel("Bienvenido a CHARLEMOS.", JLabel.CENTER);
         bienvenida.setFont(new Font("Arial", Font.BOLD, 20));
-        gbc.gridy = 0; // Fila 0
-        panelCentral.add(bienvenida, gbc);
+        bienvenida.setForeground(Color.WHITE);
+        
+        panelPrimero.add(bienvenida);
+        /*gbc.gridy = 0; // Fila 0
+        panelCentral.add(bienvenida, gbc);*/
 
         // 2. Botón Iniciar Sesión
         iniciar = new JButton("Iniciar Sesión");
         iniciar.setFont(new Font("Arial", Font.BOLD, 15));
         iniciar.setPreferredSize(new Dimension(300, 50));
         iniciar.addActionListener(this);
-        gbc.gridy = 1; // Fila 1
+        gbc.gridy = 0; // Fila 1
         panelCentral.add(iniciar, gbc);
 
         // 3. Botón Registrarte
@@ -67,10 +79,12 @@ public class Inicio extends JFrame implements ActionListener {
         registrar.setFont(new Font("Arial", Font.BOLD, 15));
         registrar.setPreferredSize(new Dimension(300, 50));
         registrar.addActionListener(this);
-        gbc.gridy = 2; // Fila 2
+        gbc.gridy = 1; // Fila 2
         panelCentral.add(registrar, gbc);
 
         // Finalmente, agregamos este bloque centralizado al centro de la ventana
+        
+        add(panelPrimero, BorderLayout.NORTH);
         add(panelCentral, BorderLayout.CENTER);
     }
     

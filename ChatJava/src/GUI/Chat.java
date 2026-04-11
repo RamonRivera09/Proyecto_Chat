@@ -1,5 +1,10 @@
 package GUI;
 
+//import Snake.FrameJuego;
+import INICIO_SESION.Conexion;
+import INICIO_SESION.Inicio;
+import SERVIDOR.Manejador_Cliente;
+import static SERVIDOR.Manejador_Cliente.usuariosConectados;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -8,11 +13,15 @@ import java.net.Socket;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.OutputStreamWriter;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -28,98 +37,290 @@ import javax.swing.JComboBox;
 import javax.swing.JScrollBar;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
+import java.nio.charset.StandardCharsets;
+import javax.swing.ImageIcon;
+import javax.swing.ListModel;
 
-public class Chat extends JFrame {
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import javax.swing.BorderFactory;
+import javax.swing.DefaultListModel;
+import java.io.File;
+import java.nio.file.Files;
+import java.util.Base64;
+import javax.swing.JColorChooser;
+import javax.swing.JFileChooser;
+
+public class Chat extends JFrame implements ActionListener {
+
     // --- Variables de Red ---
     private Socket socket;
     private BufferedReader entrada; // Para escuchar al servidor
-    private PrintWriter salida;     // Para enviarle mensajes al servidor
+    public PrintWriter salida;     // Para enviarle mensajes al servidor
     private CardLayout cardLayout;
-    private JPanel pContenedor, pantallaInicial, Separador, pChat, pChatInput, cabeceraChat, pMensajes;
+    private JPanel pContenedor, pBuscar, pantallaInicial, Separador, pChat, pChatInput, cabeceraChat, pMensajes;
     private JLabel MiPerfil, Titulo, Contactos;
     private JPopupMenu Opciones;
     private JButton Volver, Enviar;
     private JTextField Mensajes;
     private JScrollPane scrollContactos;
-
+    public PanelFavoritos vistaFavoritos;
+    public PanelBloqueados vistaBloqueados;
     // Nuevo
     private JScrollPane scrollMensajes;
     private JComboBox<String> emojis;
     private JComboBox<String> fuentes;
 
-    public Chat(){
+    private JMenuItem juego, correo, contacto, favoritos, bloqueados, fondos;
+    private JTextField txtBuscar;
+    private JButton btnBuscar;
+
+    private String usuarioLogueado; // Variable para guardar el nombre
+    DefaultListModel<String> modeloContactos = new DefaultListModel<>();
+    private DefaultListModel<String> modeloNotificaciones = new DefaultListModel<>();
+    private JList<String> listaNotificaciones = new JList<>(modeloNotificaciones);
+    private Color fondo;
+
+    public Chat(String usuario) {
+        this.usuarioLogueado = usuario; // Guardamos el nombre
         configFrame();
         initComponents();
+        prepararCarpetaArchivos();
+        cargarContactosDesdeBD();
+        cargarFavoritosDesdeBD();
+        cargarBloqueadosDesdeBD();
+        cargarContactos();
+        cargarNotificacionesDesdeBD();
+
+        // Opcional: Cambiar el título de la ventana con el nombre
+        setTitle("CHARLEMOS - Sesión de: " + usuarioLogueado);
+
         conectarAlServidor();
+        this.setIconImage(new ImageIcon(getClass().getResource("/IMAGENES/Logo_Chat.jpg")).getImage());
         setVisible(true);
     }
-    
-    public void configFrame(){
+
+    public void configFrame() {
         setSize(new Dimension(1000, 700));
         setLocationRelativeTo(null);
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        
+
         cardLayout = new CardLayout();
         pContenedor = new JPanel(cardLayout);
         setContentPane(pContenedor);
     }
-    
-    public void initComponents(){
+
+    public void initComponents() {
         pantallaInicial = new JPanel(new BorderLayout());
-        
+        PantallaPerfil vistaPerfil = new PantallaPerfil(usuarioLogueado, cardLayout, pContenedor);
+        PantallaActualizar ajuste = new PantallaActualizar(usuarioLogueado, cardLayout, pContenedor);
+        pContenedor.add(vistaPerfil, "PERFIL");
+        pContenedor.add(ajuste, "AJUSTE");
+
         // Cabecera superior
-        Separador=new JPanel(new BorderLayout());
+        Separador = new JPanel(new BorderLayout());
         Separador.setPreferredSize(new Dimension(1000, 70));
-        Separador.setBackground(new Color(200, 162, 200)); 
-        
-        Titulo = new JLabel("  WhatsChafa");
+        Separador.setBackground(new Color(200, 162, 200));
+
+        Titulo = new JLabel("CHARLEMOS");
         Titulo.setFont(new Font("Arial", Font.BOLD, 22));
         Titulo.setForeground(Color.WHITE);
         Separador.add(Titulo, BorderLayout.WEST);
-        
-        MiPerfil = new JLabel("Mi Perfil \u2630   ");
+
+        MiPerfil = new JLabel(usuarioLogueado + " Conectad@ " + " \u2630   ");
+        MiPerfil.setFont(new Font("Arial", Font.BOLD, 20));
         MiPerfil.setFont(new Font("Arial", Font.BOLD, 25));
         MiPerfil.setForeground(Color.WHITE);
         Separador.add(MiPerfil, BorderLayout.EAST);
-        
+
         Opciones = new JPopupMenu();
-        Opciones.add(new JMenuItem("Contacto"));
-        Opciones.add(new JMenuItem("Ajustes"));
+        JMenuItem itemVerPerfil = new JMenuItem("Ver mi Perfil");
+        //itemVerPerfil.setFont(new Font("Arial", Font.PLAIN, 14));
+        itemVerPerfil.addActionListener(e -> {
+            cardLayout.show(pContenedor, "PERFIL");
+        });
+        Opciones.add(itemVerPerfil);
+        JMenuItem notificaciones = new JMenuItem("Historial");
+        Opciones.add(notificaciones);
+        notificaciones.addActionListener(e -> mostrarNotificaciones());
+        correo = new JMenuItem("Registrar correo");
+        correo.addActionListener(this);
+        Opciones.add(correo);
+        juego = new JMenuItem("Jugar");
+        juego.addActionListener(this);
+        contacto = new JMenuItem("Contacto");
+        contacto.addActionListener(e -> {
+            try (Connection conn = Conexion.obtenerConexion()) {
+                String sql = "SELECT codigo FROM usuarios WHERE usuario = ?";
+                PreparedStatement ps = conn.prepareStatement(sql);
+                ps.setString(1, usuarioLogueado);
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) {
+                    String codigoActual = rs.getString("codigo");
+                    AgregarContacto ventanacontacto = new AgregarContacto(codigoActual, modeloContactos, this);
+                    ventanacontacto.setVisible(true);
+                } else {
+                    JOptionPane.showMessageDialog(this, "Error: no se pudo obtener tu código de usuario");
+                }
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error al conectar con la base de datos: " + ex.getMessage());
+            }
+        });
+        Opciones.add(contacto);
+        JMenuItem itemAjustes = new JMenuItem("Ajustes");
+        itemAjustes.addActionListener(e -> {
+            cardLayout.show(pContenedor, "AJUSTE");
+        });
+        Opciones.add(itemAjustes);
+        Opciones.add(juego);
+
+// Acción para que los botones "Volver" funcionen
+        ActionListener volverChat = e -> cardLayout.show(pContenedor, "LISTA");
+        vistaBloqueados = new PanelBloqueados(volverChat);
+        vistaBloqueados.getBtnDesbloquear().addActionListener(e -> {
+            String seleccionado = vistaBloqueados.getListaBloqueados().getSelectedValue();
+            if (seleccionado != null) {
+                actualizarBloqueadoBD(seleccionado, false); // Quitar de BD
+                vistaBloqueados.getModeloBloqueados().removeElement(seleccionado); // Quitar de la lista
+                javax.swing.JOptionPane.showMessageDialog(null, seleccionado + " ha sido desbloqueado 🔓");
+            } else {
+                javax.swing.JOptionPane.showMessageDialog(null, "Selecciona un contacto de la lista para desbloquearlo.");
+            }
+        });
+        vistaFavoritos = new PanelFavoritos(volverChat);
+        // 1. Acción para cuando des CLIC en un nombre de la lista de Favoritos
+        vistaFavoritos.getListaFavoritos().addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent evt) {
+                String seleccionado = vistaFavoritos.getListaFavoritos().getSelectedValue();
+                if (seleccionado != null) {
+                    Contactos.setText(seleccionado); // Poner nombre arriba
+                    pMensajes.removeAll(); // Limpiar mensajes
+                    pMensajes.repaint();
+                    pMensajes.revalidate();
+
+                    // Aquí mandas al frente el panel del chat (asumiendo que se llama "VistaChat")
+                    CardLayout cl = (CardLayout) pContenedor.getLayout();
+                    cl.show(pContenedor, "CHAT");
+
+                    // TODO: Aquí luego pondremos el método para cargar la conversación de BD
+                }
+            }
+        });
+
+        // 2. Acción para el botón "Quitar de Favoritos" que está en tu PanelFavoritos
+        vistaFavoritos.getBtnEliminarFav().addActionListener(e -> {
+            String seleccionado = vistaFavoritos.getListaFavoritos().getSelectedValue();
+            if (seleccionado != null) {
+                actualizarFavoritoBD(seleccionado, false); // Quitar de BD
+                vistaFavoritos.getModeloFavoritos().removeElement(seleccionado); // Quitar de la vista
+                javax.swing.JOptionPane.showMessageDialog(null, seleccionado + " quitado de favoritos.");
+            } else {
+                javax.swing.JOptionPane.showMessageDialog(null, "Selecciona un contacto primero.");
+            }
+        });
+
+// Registrar en el CardLayout de pPrincipal
+        pContenedor.add(vistaBloqueados, "bloqueados");
+        pContenedor.add(vistaFavoritos, "favoritos");
+        favoritos = new JMenuItem("Favoritos");
+        favoritos.addActionListener(e -> cardLayout.show(pContenedor, "favoritos"));
+        Opciones.add(favoritos);
+        bloqueados = new JMenuItem("Bloqueados");
+        bloqueados.addActionListener(e -> cardLayout.show(pContenedor, "bloqueados"));
+        Opciones.add(bloqueados);
         Opciones.addSeparator();
-        Opciones.add(new JMenuItem("Cerrar sesión"));
-        
+
+        //Cerrar sesión
+        JMenuItem itemCerrar = new JMenuItem("Cerrar sesión");
+        itemCerrar.setForeground(Color.RED); // Un detalle visual de alerta
+
+        itemCerrar.addActionListener(e -> {
+            // Pedimos confirmación al usuario (esto le da puntos a tu interfaz)
+            int confirmar = JOptionPane.showConfirmDialog(this,
+                    "¿Estás seguro de que quieres salir?",
+                    "Cerrar Sesión",
+                    JOptionPane.YES_NO_OPTION);
+
+            if (confirmar == JOptionPane.YES_OPTION) {
+                cerrarSesion();
+            }
+        });
+        fondo=new Color(229, 221, 213);
+        fondos=new JMenuItem("Colores/fondo");
+        fondos.addActionListener(this);
+        Opciones.add(fondos);
+        Opciones.addSeparator();
+        Opciones.add(itemCerrar);
         MiPerfil.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 Opciones.show(MiPerfil, e.getX() - 80, e.getY() + 20);
             }
         });
-        
+
         pantallaInicial.add(Separador, BorderLayout.NORTH);
-        
+
         // Lista contactos
-        String[] contactos = {"América", "Alexa", "Ramón", "Erick", "Diego", "Paco", "Justin", "Dani", "Leti", "Zayra", "Linda"};
-        JList<String> listaContactos = new JList<>(contactos);
+        JList<String> listaContactos = new JList<>(modeloContactos);
         listaContactos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         listaContactos.setFont(new Font("Arial", Font.PLAIN, 24));
         listaContactos.setFixedCellHeight(80);
-
         scrollContactos = new JScrollPane(listaContactos);
         pantallaInicial.add(scrollContactos, BorderLayout.CENTER);
-        
-        
+
+        pBuscar = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+        pBuscar.setBackground(new Color(200, 162, 200));
+
+        txtBuscar = new JTextField(30); // tamaño en columnas
+        btnBuscar = new JButton("Buscar");
+        btnBuscar.addActionListener(e -> {
+            String busqueda = txtBuscar.getText().trim().toLowerCase();
+
+            if (busqueda.isEmpty()) {
+                JOptionPane.showMessageDialog(null, "Escribe un nombre");
+                return;
+            }
+
+            ListModel<String> modelo = listaContactos.getModel();
+            boolean encontrado = false;
+
+            for (int i = 0; i < modelo.getSize(); i++) {
+                String contacto = modelo.getElementAt(i).toLowerCase();
+
+                if (contacto.contains(busqueda)) {
+                    listaContactos.setSelectedIndex(i);
+                    listaContactos.ensureIndexIsVisible(i);
+                    encontrado = true;
+                    break;
+                }
+            }
+
+            if (!encontrado) {
+                JOptionPane.showMessageDialog(null, "Contacto no registrado");
+            }
+        });
+        pBuscar.add(txtBuscar);
+        pBuscar.add(btnBuscar);
+
+        pantallaInicial.add(pBuscar, BorderLayout.SOUTH);
+
         // Segunda pantalla para el chat
         pChat = new JPanel(new BorderLayout());
-        
+
         cabeceraChat = new JPanel(new BorderLayout());
         cabeceraChat.setPreferredSize(new Dimension(1000, 70));
         cabeceraChat.setBackground(new Color(200, 162, 200));
-        
+
         Volver = new JButton("<- Volver");
         Volver.setFont(new Font("Arial", Font.BOLD, 14));
         cabeceraChat.add(Volver, BorderLayout.WEST);
-        
+
         Contactos = new JLabel("Nombre del Contacto", JLabel.CENTER);
         Contactos.setFont(new Font("Arial", Font.BOLD, 22));
         cabeceraChat.add(Contactos, BorderLayout.CENTER);
@@ -127,38 +328,143 @@ public class Chat extends JFrame {
         // Boton info
         JButton Info = new JButton("Info");
         cabeceraChat.add(Info, BorderLayout.EAST);
-        
+
         pChat.add(cabeceraChat, BorderLayout.NORTH);
-        
+
         // Área de los mensajes
         JPanel pMessages = new JPanel();
-        pMessages.setBackground(new Color(229, 221, 213)); 
+        pMessages.setBackground(new Color(229, 221, 213));
 
         // SCROLL MENSAJES
         pMessages.setLayout(new BoxLayout(pMessages, BoxLayout.Y_AXIS));
         scrollMensajes = new JScrollPane(pMessages);
         pChat.add(scrollMensajes, BorderLayout.CENTER);
         this.pMensajes = pMessages;
-        
+
         // Barra para escribir
         pChatInput = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 15));
         pChatInput.setPreferredSize(new Dimension(1000, 80));
         pChatInput.setBackground(new Color(240, 242, 245));
-        
+
+        // Crea una fuente específica para los emojis
+        Font fuenteEmoji = new Font("Segoe UI Emoji", Font.PLAIN, 16);
+
+// Aplícala al JTextField donde escribes
         JTextField Mensaje = new JTextField(30);
-        Mensaje.setFont(new Font("Arial", Font.PLAIN, 18));
+        Mensaje.setFont(fuenteEmoji);
         Enviar = new JButton("Enviar");
 
-        
         JButton Zumbido = new JButton("Zumbido");
-        JButton Archivos = new JButton("Archivos");
+        Zumbido.addActionListener(e -> {
+            // 1. Obtenemos el nombre del contacto que está arriba en la pantalla de mensajes
+            String receptorNombre = Contactos.getText(); // El nombre de la persona con la que tienes abierto el chat
+    
+    // Si la lista de bloqueados contiene a esta persona, no lo dejamos hacer nada// El nombre de la persona en el chat abierto
 
-        String[] listaEmojis = {"😊","😂","❤️","👍","😢"};
+        // 1er Candado: ¿Yo lo tengo bloqueado a él?
+        if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(receptorNombre)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "Tienes a " + receptorNombre + " bloqueado.\nDesbloquéalo primero para interactuar.", 
+                "Acción Denegada", 
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+            return; // Corta la ejecución
+        }
+
+        // 2do Candado: ¿Él me tiene bloqueado a mí? (AQUÍ ESTÁ LA MAGIA QUE PEDISTE)
+        if (meTieneBloqueado(receptorNombre)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "No puedes mandar ni mensajes, ni zumbidos ni archivos a este usuario.", 
+                "Usuario Bloqueado", 
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            return; // Corta la ejecución, no se envía nada al servidor
+        }
+        
+        // ... A partir de aquí abajo sigue tu código normal de envío de mensajes ...
+
+            // 2. Validamos que realmente haya un chat abierto
+            if (receptorNombre.equals("Selecciona un contacto") || receptorNombre.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Abre un chat para enviar un zumbido.");
+                return;
+            }
+
+            // 3. Obtenemos el código único (USR-XXX) del receptor
+            String codReceptor = obtenerCodigoDesdeNombre(receptorNombre);
+
+            // 4. Enviamos al servidor con el formato de 4 partes: TIPO||EMISOR||RECEPTOR||CONTENIDO
+            if (salida != null) {
+                // Importante: Mandamos el código de quien envía y el código de quien recibe
+                String comando = "ZUMBIDO||" + obtenerCodigoUsuarioActual() + "||" + codReceptor + "||¡ZUMBIDO!";
+                salida.println(comando);
+
+                // Registro local en consola
+                System.out.println("Enviando zumbido a: " + receptorNombre + " (" + codReceptor + ")");
+            }
+        });
+        JButton Archivos = new JButton("Archivos");
+        Archivos.addActionListener(e -> {
+            // 1. Identificamos al usuario de la ventana de chat actual
+            String receptorNombre = Contactos.getText(); // El nombre de la persona en el chat abierto
+
+        // 1er Candado: ¿Yo lo tengo bloqueado a él?
+        if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(receptorNombre)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "Tienes a " + receptorNombre + " bloqueado.\nDesbloquéalo primero para interactuar.", 
+                "Acción Denegada", 
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+            return; // Corta la ejecución
+        }
+
+        // 2do Candado: ¿Él me tiene bloqueado a mí? (AQUÍ ESTÁ LA MAGIA QUE PEDISTE)
+        if (meTieneBloqueado(receptorNombre)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "No puedes mandar ni mensajes, ni zumbidos ni archivos a este usuario.", 
+                "Usuario Bloqueado", 
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            return; // Corta la ejecución, no se envía nada al servidor
+        }
+        
+        // ... A partir de aquí abajo sigue tu código normal de envío de mensajes ...
+            if (receptorNombre.equals("Selecciona un contacto") || receptorNombre.isEmpty()) {
+                javax.swing.JOptionPane.showMessageDialog(this, "Selecciona un contacto primero.");
+                return;
+            }
+
+            JFileChooser selector = new JFileChooser();
+            int resultado = selector.showOpenDialog(this);
+
+            if (resultado == JFileChooser.APPROVE_OPTION) {
+                File archivo = selector.getSelectedFile();
+                try {
+                    // 2. Convertir archivo a Base64
+                    byte[] bytes = java.nio.file.Files.readAllBytes(archivo.toPath());
+                    String archivoBase64 = java.util.Base64.getEncoder().encodeToString(bytes);
+
+                    // 3. Formato para el servidor: FILE || EMISOR || RECEPTOR || NOMBRE:CONTENIDO
+                    String codReceptor = obtenerCodigoDesdeNombre(receptorNombre);
+                    String mensaje = "FILE||" + obtenerCodigoUsuarioActual() + "||" + codReceptor + "||" + archivo.getName() + ":" + archivoBase64;
+
+                    // 4. Enviar por el socket
+                    if (salida != null) {
+                        salida.println(mensaje);
+
+                        // 5. Feedback visual en el chat y guardar en BD
+                        mostrarMensajeEnChat(usuarioLogueado, "📎 Archivo enviado: " + archivo.getName() + "\n(Ruta local: " + archivo.getAbsolutePath() + ")", "Arial", true);
+                        guardarMensajeEnBD(usuarioLogueado, receptorNombre, "📎 Envió un archivo: " + archivo.getName());
+                    }
+
+                } catch (java.io.IOException ex) {
+                    ex.printStackTrace();
+                    javax.swing.JOptionPane.showMessageDialog(this, "Error al procesar el archivo.");
+                }
+            }
+        });
+
+        String[] listaEmojis = {"😊", "😂", "❤️", "👍", "😢"};
         emojis = new JComboBox<>(listaEmojis);
 
-        String[] listaFuentes = {"Arial","Courier New","Times New Roman"};
+        String[] listaFuentes = {"Arial", "Courier New", "Times New Roman"};
         fuentes = new JComboBox<>(listaFuentes);
-        
+
         pChatInput.add(emojis);
         pChatInput.add(Mensaje);
         pChatInput.add(fuentes);
@@ -166,7 +472,7 @@ public class Chat extends JFrame {
         pChatInput.add(Archivos);
         pChatInput.add(Enviar);
         pChat.add(pChatInput, BorderLayout.SOUTH);
-        
+
         // EMOJIS
         emojis.addActionListener(e -> {
             String emoji = emojis.getSelectedItem().toString();
@@ -175,138 +481,951 @@ public class Chat extends JFrame {
         });
 
         // ENVIAR MENSAJE
-        Enviar.addActionListener(e -> enviarMensaje(Mensaje));
+        Enviar.addActionListener(e -> {
+            String texto = Mensaje.getText().trim();
+            String receptorNom = Contactos.getText();// El nombre de la persona en el chat abierto
+
+        // 2do Candado: ¿Él me tiene bloqueado a mí? (AQUÍ ESTÁ LA MAGIA QUE PEDISTE)
+        if (meTieneBloqueado(receptorNom)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "No puedes mandar ni mensajes, ni zumbidos ni archivos a este usuario.", 
+                "Usuario Bloqueado", 
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            return; // Corta la ejecución, no se envía nada al servidor
+        }
+        
+        // ... A partir de aquí abajo sigue tu código normal de envío de mensajes ...
+
+            // IMPORTANTE: Obtener el valor seleccionado del JComboBox
+            String fuenteSeleccionada = (String) fuentes.getSelectedItem();
+
+            if (!texto.isEmpty() && !receptorNom.equals("Selecciona un contacto")) {
+                String codRec = obtenerCodigoDesdeNombre(receptorNom);
+
+                // El formato debe ser: MSG||Emisor||Receptor||Fuente:Mensaje
+                // Verifica que pusiste los ":" entre fuenteSeleccionada y texto
+                String comandoCompleto = "MSG||" + obtenerCodigoUsuarioActual() + "||" + codRec + "||" + fuenteSeleccionada + ":" + texto;
+
+                salida.println(comandoCompleto); // Esto envía el paquete completo al servidor
+
+                mostrarMensajeEnChat(usuarioLogueado, texto, fuenteSeleccionada, true);
+                guardarMensajeEnBD(usuarioLogueado, receptorNom, texto);
+                Mensaje.setText("");
+            }
+        });
         Mensaje.addActionListener(e -> enviarMensaje(Mensaje));
 
         // INFO CONTACTO
         Info.addActionListener(e -> {
-            String nombre = Contactos.getText();
-            String codigo = "USR-" + nombre.substring(0,2).toUpperCase() + "01";
+            String nombreSeleccionado = Contactos.getText();
 
-            javax.swing.JOptionPane.showMessageDialog(null,
-                    "Nombre: " + nombre +
-                    "\nEstado: Disponible" +
-                    "\nCódigo: " + codigo);
-        });
-        
+            // Si no hay contacto seleccionado, no buscamos nada
+            if (nombreSeleccionado.equals("Selecciona un contacto") || nombreSeleccionado.isEmpty()) {
+                javax.swing.JOptionPane.showMessageDialog(null, "Por favor, selecciona un contacto primero.");
+                return;
+            }
+
+            // Consultamos la base de datos (Agregamos 'id' para poder usarlo en las eliminaciones)
+            String sql = "SELECT id, usuario, codigo, correo FROM usuarios WHERE usuario = ?";
+
+            try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+                ps.setString(1, nombreSeleccionado);
+                ResultSet rs = ps.executeQuery();
+
+                if (rs.next()) {
+                    int idContactoBD = rs.getInt("id"); // Rescatamos el ID numérico
+                    String nombreBD = rs.getString("usuario");
+                    String codigoBD = rs.getString("codigo");
+                    String correoBD = rs.getString("correo");
+
+                    // Validar si el correo es nulo o vacío
+                    if (correoBD == null || correoBD.trim().isEmpty()) {
+                        correoBD = "No registrado";
+                    }
+
+                    String estado = "Disponible";
+
+                    // Arreglo con los botones personalizados que aparecerán en el diálogo
+                    Object[] opciones = {"Bloquear contacto", "Agregar a Favoritos", "Eliminar contacto", "Cerrar"};
+
+                    // Mostrar el cuadro de diálogo con opciones
+                    int eleccion = javax.swing.JOptionPane.showOptionDialog(null,
+                            "📋 INFORMACIÓN DEL CONTACTO\n"
+                            + "------------------------------------------\n"
+                            + "Nombre: " + nombreBD + "\n"
+                            + "Código: " + codigoBD + "\n"
+                            + "Correo: " + correoBD + "\n"
+                            + "Estado: " + estado,
+                            "Detalles de Usuario",
+                            javax.swing.JOptionPane.DEFAULT_OPTION,
+                            javax.swing.JOptionPane.INFORMATION_MESSAGE,
+                            null,
+                            opciones,
+                            opciones[3] // El botón 'Cerrar' será el seleccionado por defecto
+                    );
+
+                    if (eleccion == 0) {
+                        // LÓGICA DE BLOQUEAR
+                        DefaultListModel<String> modBloq = vistaBloqueados.getModeloBloqueados();
+
+                        if (!modBloq.contains(nombreBD)) {
+                            actualizarBloqueadoBD(nombreBD, true); // Guarda en BD
+                            modBloq.addElement(nombreBD); // Añade a la lista visual de bloqueados
+                            javax.swing.JOptionPane.showMessageDialog(null, nombreBD + " ha sido bloqueado 🚫");
+                        } else {
+                            javax.swing.JOptionPane.showMessageDialog(null, "Este contacto ya está bloqueado.");
+                        }
+                    } // <--- ¡ESTA ES LA LLAVE QUE FALTABA!
+                    else if (eleccion == 1) {
+                        // LÓGICA DE FAVORITOS
+                        DefaultListModel<String> modFav = vistaFavoritos.getModeloFavoritos();
+
+                        if (!modFav.contains(nombreBD)) {
+                            // 1. Actualizar BD
+                            actualizarFavoritoBD(nombreBD, true);
+                            // 2. Agregar a la lista
+                            modFav.addElement(nombreBD);
+                            javax.swing.JOptionPane.showMessageDialog(null, nombreBD + " añadido a Favoritos ⭐");
+                        } else {
+                            javax.swing.JOptionPane.showMessageDialog(null, "Este contacto ya está en tus favoritos.");
+                        }
+                    } else if (eleccion == 2) {
+                        // LÓGICA DE ELIMINAR CONTACTO
+                        int confirmar = javax.swing.JOptionPane.showConfirmDialog(null,
+                                "¿Estás seguro de que deseas eliminar permanentemente a " + nombreBD + "?\nEsto borrará el historial de chat para ambos.",
+                                "Confirmar eliminación",
+                                javax.swing.JOptionPane.YES_NO_OPTION,
+                                javax.swing.JOptionPane.WARNING_MESSAGE);
+
+                        if (confirmar == javax.swing.JOptionPane.YES_OPTION) {
+                            eliminarContactoDeTodasPartes(idContactoBD, nombreBD, codigoBD);
+                        }
+                    }
+                } else {
+                    javax.swing.JOptionPane.showMessageDialog(null, "No se encontró información del usuario.");
+                }
+
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+                javax.swing.JOptionPane.showMessageDialog(null, "Error al acceder a la base de datos.");
+            }
+        }
+        );
+
         // CAMBIO DE PANTALLA
         listaContactos.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 String seleccionado = listaContactos.getSelectedValue();
                 if (seleccionado != null) {
-                    Contactos.setText(seleccionado); 
+                    Contactos.setText(seleccionado);
+
+                    // 🚀 REEMPLAZA EL REMOVEALL() POR ESTO:
+                    cargarHistorialMensajes(seleccionado);
+                    // -------------------------------------------------------------
+
                     cardLayout.show(pContenedor, "CHAT");
                 }
             }
         });
-        
+
         Volver.addActionListener(e -> {
-            listaContactos.clearSelection(); 
+            listaContactos.clearSelection();
             cardLayout.show(pContenedor, "LISTA");
         });
-        
+
         pContenedor.add(pantallaInicial, "LISTA");
         pContenedor.add(pChat, "CHAT");
-        
+
         cardLayout.show(pContenedor, "LISTA");
+
     }
-    
-    public void conectarAlServidor() {
-        try {
-            // 1. Nos conectamos al "puerto" de tu computadora (localhost) donde vive el Servidor
-            socket = new Socket("localhost", 9090);
-            entrada = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            salida = new PrintWriter(socket.getOutputStream(), true);
+    private String rutaDescargas;
 
-            // 2. Creamos un Hilo (Thread) que estará siempre escuchando si llega un mensaje
-            Thread hiloEscucha = new Thread(() -> {
-                String mensajeRecibido;
-                try {
-                    // Mientras el servidor nos siga mandando cosas...
-                    while ((mensajeRecibido = entrada.readLine()) != null) {
-                        // ... mandamos ese texto a tu método para dibujar la burbuja izquierda
-                        recibirMensaje(mensajeRecibido);
-                    }
-                } catch (IOException ex) {
-                    System.out.println("Desconectado del servidor.");
-                }
-            });
-            hiloEscucha.start(); // Arrancamos la oreja virtual
+    private void prepararCarpetaArchivos() {
+        String home = System.getProperty("user.home");
+        // Ruta: Documentos/CHARLEMOS_Archivos
+        File carpeta = new File(home + File.separator + "Documents" + File.separator + "CHARLEMOS_Archivos");
 
-        } catch (IOException ex) {
-            javax.swing.JOptionPane.showMessageDialog(this, "No se pudo conectar al servidor. ¿Está encendido?", "Error de red", javax.swing.JOptionPane.ERROR_MESSAGE);
-        }
-    }
-    // MENSAJE DERECHA
-    public void enviarMensaje(JTextField Mensaje){
-        String texto = Mensaje.getText();
-        String tipoFuente = fuentes.getSelectedItem().toString();
-
-        if (!texto.isEmpty()) {
-            String hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
-
-            JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-            panel.setBackground(new Color(229,221,213));
-
-            JPanel burbuja = new JPanel();
-            burbuja.setLayout(new BoxLayout(burbuja, BoxLayout.Y_AXIS));
-            burbuja.setBackground(new Color(220,248,198));
-
-            JLabel mensaje = new JLabel(texto);
-            mensaje.setFont(new Font(tipoFuente, Font.PLAIN, 16));
-
-            JLabel horaLabel = new JLabel(hora);
-            horaLabel.setFont(new Font("Arial", Font.PLAIN, 10));
-            horaLabel.setForeground(Color.GRAY);
-
-            burbuja.add(mensaje);
-            burbuja.add(horaLabel);
-            panel.add(burbuja);
-
-            pMensajes.add(panel);
-            pMensajes.revalidate();
-
-            JScrollBar vertical = scrollMensajes.getVerticalScrollBar();
-            vertical.setValue(vertical.getMaximum());
-
-            Mensaje.setText("");
-
-            // SOCKET: Enviamos el texto al servidor
-            if (salida != null) {
-                salida.println(texto);
+        if (!carpeta.exists()) {
+            if (carpeta.mkdirs()) {
+                System.out.println("Directorio de archivos creado: " + carpeta.getAbsolutePath());
             }
         }
+        rutaDescargas = carpeta.getAbsolutePath();
     }
-    
-    // MENSAJE IZQUIERDA
-    public void recibirMensaje(String texto){
-        String hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
 
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        panel.setBackground(new Color(229,221,213));
+    public void conectarAlServidor() {
+        try {
+            socket = new Socket("localhost", 9090);
+            // Usamos UTF_8 para que los emojis no se rompan
+            // Al crear la entrada:
+            entrada = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
 
+// Al crear la salida (fíjate en el OutputStreamWriter):
+            salida = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
+
+            // 1️⃣ IDENTIFICACIÓN: Enviamos el CÓDIGO, no el nombre.
+            // Esto soluciona que las notificaciones no lleguen en tiempo real.
+            String miCodigo = obtenerCodigoUsuarioActual();
+            salida.println(miCodigo);
+            System.out.println("Identificado en servidor con código: " + miCodigo);
+
+            // 2️⃣ HILO DE ESCUCHA: El "oído" del cliente
+            Thread hiloEscucha = new Thread(() -> {
+                try {
+                    String linea;
+                    while ((linea = entrada.readLine()) != null) {
+
+                        final String mensajeRecibido = linea;
+
+                        // Ejecutamos en el hilo de la interfaz (EDT) para evitar errores visuales
+                        SwingUtilities.invokeLater(() -> {
+                            // ... dentro del thread de escucha ...
+                            // Dentro del while((mensajeRecibido = entrada.readLine()) != null)
+                            if (mensajeRecibido.startsWith("MSG||")) {
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                if (partes.length >= 4) {
+                                    String emisorCod = partes[1];
+                                    String contenidoCompleto = partes[3]; // Aquí llega "Courier New:Hola"
+                                    String nombreEmisor = obtenerNombreDesdeCodigo(emisorCod);
+// Si 'nombreEmisor' es la variable donde guardas quién te mandó el mensaje
+                                    if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(nombreEmisor)) {
+                                        System.out.println("Mensaje bloqueado de: " + nombreEmisor);
+                                        return; // 🚫 IMPORTANTE: 'continue' hace que salte este mensaje y siga esperando el siguiente, ignorando el actual por completo.
+                                    }
+
+                                    String fuenteARenderizar = "Arial"; // Default
+                                    String textoLimpio = contenidoCompleto;
+
+                                    // VERIFICACIÓN CLAVE: ¿Contiene los dos puntos?
+                                    if (contenidoCompleto.contains(":")) {
+                                        // El limit 2 es para que si el mensaje tiene ":" no se rompa
+                                        String[] subPartes = contenidoCompleto.split(":", 2);
+                                        fuenteARenderizar = subPartes[0]; // "Courier New"
+                                        textoLimpio = subPartes[1];       // "Hola"
+                                    }
+
+                                    if (Contactos.getText().equals(nombreEmisor)) {
+                                        // PASAMOS LA FUENTE EXTRAÍDA
+                                        mostrarMensajeEnChat(nombreEmisor, textoLimpio, fuenteARenderizar, false);
+
+                                    }
+                                    JOptionPane.showMessageDialog(Chat.this,
+                                            "Nuevo mensaje de " + nombreEmisor + ".\n",
+                                            "Mensaje Recibido",
+                                            JOptionPane.INFORMATION_MESSAGE);
+                                }
+                            } else if (mensajeRecibido.startsWith("NOTIF||")) {
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                if (partes.length >= 4) {
+                                    String nombreEmisor = obtenerNombreDesdeCodigo(partes[1]);
+                                    if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(nombreEmisor)) {
+                                        System.out.println("Mensaje bloqueado de: " + nombreEmisor);
+                                        return; // 🚫 IMPORTANTE: 'continue' hace que salte este mensaje y siga esperando el siguiente, ignorando el actual por completo.
+                                    }
+                                    agregarNotificacion(nombreEmisor, partes[3]);
+                                    cargarContactos(); // Por si nos agregaron
+                                    JOptionPane.showMessageDialog(Chat.this,
+                                            "El usuario " + nombreEmisor + " te ha agregado", "\n",
+                                            JOptionPane.INFORMATION_MESSAGE);
+                                }
+                            } else if (mensajeRecibido.startsWith("OFFLINE||")) {
+                                // 🚀 Manejo de usuario desconectado
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                String nombreReceptor = obtenerNombreDesdeCodigo(partes[1]);
+
+                                JOptionPane.showMessageDialog(Chat.this,
+                                        "El usuario " + nombreReceptor + " está desconectado.\nEl mensaje se guardó en su historial.",
+                                        "Usuario Offline", JOptionPane.INFORMATION_MESSAGE);
+
+                                // Guardamos una notificación para que el otro la vea al volver
+                                guardarNotificacionOfflineEnBD(nombreReceptor, usuarioLogueado, "te dejó un mensaje pendiente.");
+                                // ... debajo de los otros else if (MSG, NOTIF, etc.) ...
+                            } else if (mensajeRecibido.startsWith("ZUMBIDO||")) {
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                if (partes.length >= 4) {
+                                    String codEmisor = partes[1];
+                                    String nombreEmisor = obtenerNombreDesdeCodigo(codEmisor);
+                                    if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(nombreEmisor)) {
+                                        System.out.println("Mensaje bloqueado de: " + nombreEmisor);
+                                        return; // 🚫 IMPORTANTE: 'continue' hace que salte este mensaje y siga esperando el siguiente, ignorando el actual por completo.
+                                    }
+
+                                    // Lanzar el mensaje de diálogo en cualquier parte de la app
+                                    JOptionPane.showMessageDialog(Chat.this,
+                                            "¡El usuario " + nombreEmisor + " te ha enviado un zumbido!",
+                                            "¡ZUMBIDO!",
+                                            JOptionPane.WARNING_MESSAGE);
+
+                                    // También lo registramos en las notificaciones por si acaso
+                                    agregarNotificacion(nombreEmisor, "te envió un zumbido");
+                                }
+                            } else // Cuando recibes la notificación de que alguien te borró
+                            if (mensajeRecibido.startsWith("ELIMINAR_CONTACTO||")) {
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                String nombreEmisor = obtenerNombreDesdeCodigo(partes[1]);
+
+                                if (partes.length >= 2) {
+                                    String nombreABorrar = partes[1]; // Nombre de quien nos acaba de eliminar
+
+                                    // Actualizamos la interfaz gráfica de forma segura
+                                    javax.swing.SwingUtilities.invokeLater(() -> {
+                                        // 1. Lo borramos de la lista visual
+                                        modeloContactos.removeElement(nombreABorrar);
+
+                                        // 2. Si da la casualidad de que teníamos el chat abierto con él, lo cerramos
+                                        if (Contactos.getText().equals(nombreABorrar)) {
+                                            Contactos.setText("Selecciona un contacto");
+                                            pMensajes.removeAll();
+                                            pMensajes.repaint();
+                                            pMensajes.revalidate();
+                                        }
+                                    });
+                                    JOptionPane.showMessageDialog(Chat.this,
+                                            "El usuario " + nombreEmisor + " te ha borrado", "\n",
+                                            JOptionPane.INFORMATION_MESSAGE);
+                                } // Si estás en un ciclo while. Si tu método es tipo void usa: return;
+                            } else if (mensajeRecibido.startsWith("FILE||")) {
+                                String[] partes = mensajeRecibido.split("\\|\\|");
+                                if (partes.length >= 4) {
+                                    String emisorCod = partes[1];
+                                    String nombreEmisor = obtenerNombreDesdeCodigo(emisorCod);
+                                    if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(nombreEmisor)) {
+                                        System.out.println("Mensaje bloqueado de: " + nombreEmisor);
+                                        return; // 🚫 IMPORTANTE: 'continue' hace que salte este mensaje y siga esperando el siguiente, ignorando el actual por completo.
+                                    }
+                                    String contenidoExtra = partes[3]; // trae "nombreArchivo:codigoBase64"
+
+                                    String[] datosArchivo = contenidoExtra.split(":", 2);
+                                    String nombreArchivo = datosArchivo[0];
+                                    String base64Datos = datosArchivo[1];
+
+                                    try {
+                                        // 1. Convertir de nuevo a bytes
+                                        byte[] bytesDescargados = java.util.Base64.getDecoder().decode(base64Datos);
+
+                                        // 2. Ruta final en la carpeta CHARLEMOS_Archivos
+                                        java.io.File archivoDestino = new java.io.File(rutaDescargas + java.io.File.separator + nombreArchivo);
+                                        java.nio.file.Files.write(archivoDestino.toPath(), bytesDescargados);
+
+                                        // 3. Mostrar en el chat del receptor
+                                        if (Contactos.getText().equals(nombreEmisor)) {
+                                            mostrarMensajeEnChat(nombreEmisor, "📂 Archivo recibido y guardado: " + nombreArchivo, "Arial", false);
+                                        }
+
+                                        // Notificación global
+                                        agregarNotificacion(nombreEmisor, "te envió un archivo: " + nombreArchivo);
+                                        javax.swing.JOptionPane.showMessageDialog(Chat.this, "Archivo guardado en: Documents/CHARLEMOS_Archivos");
+
+                                    } catch (java.io.IOException ex) {
+                                        System.err.println("Error al guardar archivo recibido: " + ex.getMessage());
+                                    }
+                                }
+                            }
+                        });
+                    }
+                } catch (IOException ex) {
+                    System.out.println("Conexión con el servidor perdida.");
+                }
+            });
+            hiloEscucha.start();
+
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "Error: El servidor no responde.", "Error de Red", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void enviarMensaje(JTextField Mensaje) {
+        String contactoActual = Contactos.getText(); // El nombre del chat que tienes abierto
+
+        if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(contactoActual)) {
+            javax.swing.JOptionPane.showMessageDialog(null, "No puedes enviarle mensajes a un contacto bloqueado. Desbloquéalo primero.");
+            return; // 🚫 Corta la acción aquí para que no se envíe nada
+        }
+        String texto = Mensaje.getText();
+        if (texto.isEmpty()) {
+            return;
+        }
+
+        String tipoFuente = fuentes.getSelectedItem().toString();
+
+        // Detectar emojis y usar fuente específica
+        String[] listaEmojis = {"😊", "😂", "❤️", "👍", "😢"};
+        for (String emoji : listaEmojis) {
+            if (texto.contains(emoji)) {
+                tipoFuente = "Segoe UI Emoji";
+            }
+        }
+
+        // Mostrar en pantalla
+        mostrarMensajeEnChat(usuarioLogueado, texto, tipoFuente, true);
+
+        // --------------- Enviar al servidor ---------------
+        String receptor = Contactos.getText(); // nombre del contacto seleccionado
+        String codigoReceptor = obtenerCodigoDesdeNombre(receptor);
+        if (codigoReceptor != null && salida != null) {
+            salida.println("MSG||" + obtenerCodigoUsuarioActual() + "||" + codigoReceptor + "||" + texto);
+            guardarMensajeEnBD(usuarioLogueado, receptor, texto);
+        }
+
+        Mensaje.setText("");
+    }
+
+    private void mostrarMensajeEnChat(String emisor, String texto, String tipoFuente, boolean esMio) {
+        // 1. Crear el panel contenedor de la burbuja
+        pMensajes.setBackground(fondo);
         JPanel burbuja = new JPanel();
         burbuja.setLayout(new BoxLayout(burbuja, BoxLayout.Y_AXIS));
-        burbuja.setBackground(Color.WHITE);
 
-        JLabel mensaje = new JLabel(texto);
+        // Color: Azul claro si es mío, blanco si es del otro
+        burbuja.setBackground(esMio ? new Color(144, 238, 144) : Color.WHITE);
+        burbuja.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+                new javax.swing.border.LineBorder(new Color(200, 200, 200), 1, true),
+                javax.swing.BorderFactory.createEmptyBorder(5, 10, 5, 10)
+        ));
 
-        JLabel horaLabel = new JLabel(hora);
-        horaLabel.setFont(new Font("Arial", Font.PLAIN, 10));
-        horaLabel.setForeground(Color.GRAY);
+        // 2. Etiqueta del nombre del emisor (siempre en Arial negrita pequeña)
+        JLabel labelEmisor = new JLabel(emisor);
+        labelEmisor.setFont(new Font("Arial", Font.BOLD, 10));
+        labelEmisor.setForeground(Color.GRAY);
+        labelEmisor.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        burbuja.add(mensaje);
-        burbuja.add(horaLabel);
-        panel.add(burbuja);
+        // 3. Etiqueta del contenido del mensaje (AQUÍ APLICAMOS LA FUENTE)
+        // Usamos HTML para que el texto respete el ancho y haga saltos de línea
+        JLabel labelTexto = new JLabel("<html><p style='width: 150px;'>" + texto + "</p></html>");
 
-        pMensajes.add(panel);
+        // VALIDACIÓN DE FUENTE: Si por alguna razón tipoFuente llega vacío, usamos Arial
+        if (tipoFuente == null || tipoFuente.isEmpty()) {
+            tipoFuente = "Arial";
+        }
+
+        // Aplicamos la fuente que seleccionó el emisor
+        labelTexto.setFont(new Font(tipoFuente, Font.PLAIN, 14));
+        labelTexto.setAlignmentX(Component.LEFT_ALIGNMENT);
+        String horaActual = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+        JLabel labelHora = new JLabel(horaActual);
+        labelHora.setFont(new Font("Arial", Font.ITALIC, 9));
+        labelHora.setForeground(new Color(100, 100, 100)); // Gris oscuro
+        labelHora.setAlignmentX(Component.RIGHT_ALIGNMENT);
+
+        // 4. Agregar elementos a la burbuja
+        burbuja.add(labelEmisor);
+        burbuja.add(javax.swing.Box.createRigidArea(new Dimension(0, 5))); // Espacio pequeño
+        burbuja.add(labelTexto);
+        burbuja.add(javax.swing.Box.createRigidArea(new Dimension(0, 2)));
+        burbuja.add(labelHora);
+
+        // 5. Alinear la burbuja a la derecha (mío) o izquierda (otro)
+        JPanel contenedorAliniacion = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
+        contenedorAliniacion.setOpaque(false); // Para que no tape el fondo del chat
+        contenedorAliniacion.add(burbuja);
+
+        // 6. Añadir al panel principal de mensajes y refrescar
+        pMensajes.add(contenedorAliniacion);
         pMensajes.revalidate();
+        pMensajes.repaint();
 
-        JScrollBar vertical = scrollMensajes.getVerticalScrollBar();
-        vertical.setValue(vertical.getMaximum());
+        // 7. Auto-scroll: Mover la barra de desplazamiento hacia abajo automáticamente
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            JScrollBar vertical = scrollMensajes.getVerticalScrollBar();
+            vertical.setValue(vertical.getMaximum());
+        });
     }
-    
-    public static void main(String[] args) {
+
+    private void cerrarSesion() {
+        try {
+            // 1. Avisar al servidor o cerrar los flujos
+            if (salida != null) {
+                salida.close();
+            }
+            if (entrada != null) {
+                entrada.close();
+            }
+            if (socket != null) {
+                socket.close();
+            }
+
+            System.out.println("Conexiones cerradas correctamente.");
+        } catch (IOException e) {
+            System.err.println("Error al cerrar conexión: " + e.getMessage());
+        } finally {
+            // 2. Regresar a la pantalla de Inicio
+            new Inicio();
+
+            // 3. Destruir la ventana de Chat por completo
+            this.dispose();
+        }
+    }
+
+    private void mostrarNotificaciones() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.add(new JScrollPane(listaNotificaciones), BorderLayout.CENTER);
+
+        JButton btnVolver = new JButton("Volver a Contactos");
+        btnVolver.addActionListener(e -> cardLayout.show(pContenedor, "LISTA"));
+        panel.add(btnVolver, BorderLayout.SOUTH);
+
+        pContenedor.add(panel, "NOTIFICACIONES");
+        cardLayout.show(pContenedor, "NOTIFICACIONES");
+
+        // Doble clic sobre la notificación abre chat
+        listaNotificaciones.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    int index = listaNotificaciones.locationToIndex(evt.getPoint());
+                    if (index >= 0) {
+                        String item = modeloNotificaciones.get(index);
+                        String nombreContacto = item.split(" - ")[0]; // extrae el nombre
+                        abrirChatCon(nombreContacto);
+                    }
+                }
+            }
+        });
+    }
+
+    private void abrirChatCon(String nombreContacto) {
+        Contactos.setText(nombreContacto);
+        cardLayout.show(pContenedor, "CHAT");
+    }
+
+    public void enviarNotificacion(String codigoEmisor, String codigoReceptor, String mensaje) {
+        // YA NO NECESITAS BUSCAR EL NOMBRE EN LA BD AQUÍ
+        // Porque el mapa 'usuariosConectados' ahora usa CÓDIGOS como llave.
+
+        if (usuariosConectados.containsKey(codigoReceptor)) {
+            Manejador_Cliente mc = usuariosConectados.get(codigoReceptor);
+            mc.salida.println("NOTIF||" + codigoEmisor + "||" + codigoReceptor + "||" + mensaje);
+            System.out.println("Notificación enviada con éxito al código: " + codigoReceptor);
+        } else {
+            System.out.println("Usuario desconectado o código no encontrado: " + codigoReceptor);
+        }
+    }
+
+    private String obtenerCodigoUsuarioActual() {
+        try (Connection conn = Conexion.obtenerConexion()) {
+            String sql = "SELECT codigo FROM usuarios WHERE usuario = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, usuarioLogueado);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                return rs.getString("codigo");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return "";
+    }
+
+    private void cargarContactos() {
+        try (Connection conn = Conexion.obtenerConexion()) {
+
+            // Obtener ID del usuario actual
+            String sqlId = "SELECT id FROM usuarios WHERE usuario = ?";
+            PreparedStatement psId = conn.prepareStatement(sqlId);
+            psId.setString(1, usuarioLogueado);
+            ResultSet rsId = psId.executeQuery();
+
+            if (!rsId.next()) {
+                return;
+            }
+
+            int idUsuario = rsId.getInt("id");
+
+            // Obtener contactos
+            String sql = "SELECT u.usuario FROM contactos c "
+                    + "JOIN usuarios u ON c.contacto_id = u.id "
+                    + "WHERE c.usuario_id = ? AND c.estado = 'aceptado'";
+
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setInt(1, idUsuario);
+            ResultSet rs = ps.executeQuery();
+
+            modeloContactos.clear(); // limpiar lista antes
+
+            while (rs.next()) {
+                modeloContactos.addElement(rs.getString("usuario"));
+            }
+
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error al cargar contactos: " + e.getMessage());
+        }
+    }
+
+    private String obtenerCodigoDesdeNombre(String nombre) {
+        try (Connection conn = Conexion.obtenerConexion()) {
+            String sql = "SELECT codigo FROM usuarios WHERE usuario = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, nombre);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                return rs.getString("codigo");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    private String obtenerNombreDesdeCodigo(String codigo) {
+        try (Connection conn = Conexion.obtenerConexion()) {
+            String sql = "SELECT usuario FROM usuarios WHERE codigo = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, codigo);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                return rs.getString("usuario");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return codigo;
+    }
+
+    // --- 1. SE ARREGLÓ PARA QUE GUARDE EN LA BASE DE DATOS ---
+    private void agregarNotificacion(String nombreEmisor, String mensaje) {
+        String hora = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+        String contenidoCompleto = nombreEmisor + " - " + hora + " : " + mensaje;
+
+        // Lo mostramos en pantalla
+        modeloNotificaciones.addElement(contenidoCompleto);
+
+        // LO GUARDAMOS EN LA BASE DE DATOS PARA QUE NO SE BORRE
+        String sql = "INSERT INTO notificaciones (receptor_id, contenido) VALUES ((SELECT id FROM usuarios WHERE usuario = ?), ?)";
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, usuarioLogueado);
+            ps.setString(2, contenidoCompleto);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println("Error al guardar notificación: " + e.getMessage());
+        }
+    }
+
+    private void guardarMensajeEnBD(String emisor, String receptor, String contenido) {
+        String sql = "INSERT INTO mensajes (emisor_id, receptor_id, contenido) VALUES ("
+                + "(SELECT id FROM usuarios WHERE usuario = ?), "
+                + "(SELECT id FROM usuarios WHERE usuario = ?), ?)";
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, emisor);
+            ps.setString(2, receptor);
+            ps.setString(3, contenido);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void guardarNotificacionOfflineEnBD(String receptorNom, String emisorNom, String accion) {
+        String hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
+        String contenido = emisorNom + " - " + hora + " : " + accion;
+
+        String sql = "INSERT INTO notificaciones (receptor_id, contenido) VALUES "
+                + "((SELECT id FROM usuarios WHERE usuario = ?), ?)";
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, receptorNom);
+            ps.setString(2, contenido);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void cargarHistorialMensajes(String contactoNombre) {
+        pMensajes.setBackground(fondo);
+        pMensajes.removeAll();
+        String sql = "SELECT m.contenido, u_e.usuario as emisor_nom FROM mensajes m "
+                + "JOIN usuarios u_e ON m.emisor_id = u_e.id "
+                + "JOIN usuarios u_r ON m.receptor_id = u_r.id "
+                + "WHERE (u_e.usuario = ? AND u_r.usuario = ?) OR (u_e.usuario = ? AND u_r.usuario = ?) "
+                + "ORDER BY m.fecha ASC";
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, usuarioLogueado);
+            ps.setString(2, contactoNombre);
+            ps.setString(3, contactoNombre);
+            ps.setString(4, usuarioLogueado);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                boolean esMio = rs.getString("emisor_nom").equals(usuarioLogueado);
+                mostrarMensajeEnChat(rs.getString("emisor_nom"), rs.getString("contenido"), "Arial", esMio);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        pMensajes.revalidate();
+        pMensajes.repaint();
+    }
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if(e.getSource()==fondos){
+            Color nuevoColor = JColorChooser.showDialog(
+                        null, 
+                        "Seleccione un color", 
+                        fondo
+                );
+            if (nuevoColor != null) {
+                    fondo = nuevoColor;
+                    pMensajes.setBackground(fondo);
+                    System.out.println("Color seleccionado: " + fondo);
+                }
+        }
+        if (e.getSource() == juego) {
+            new FrameJuego();
+        }
+        if (e.getSource() == correo) {
+            Correo ventanaCorreo = new Correo(usuarioLogueado);
+            ventanaCorreo.setVisible(true);
+        }
+    }
+
+    private void cargarContactosDesdeBD() {
+        // 1. Limpiamos la lista actual para no duplicar si se recarga
+        modeloContactos.clear();
+
+        String sql = "SELECT u.usuario FROM contactos c "
+                + "JOIN usuarios u ON c.contacto_id = u.id "
+                + "WHERE c.usuario_id = (SELECT id FROM usuarios WHERE codigo = ?) "
+                + "AND c.estado = 'aceptado'";
+
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, usuarioLogueado); // usuarioLogueado es tu código (USR-XXX)
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                String nombreContacto = rs.getString("usuario");
+                modeloContactos.addElement(nombreContacto);
+            }
+            System.out.println("Contactos cargados desde BD para: " + usuarioLogueado);
+
+        } catch (SQLException e) {
+            System.err.println("Error al cargar contactos: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void cargarNotificacionesDesdeBD() {
+        modeloNotificaciones.clear();
+
+        // Buscamos las notificaciones donde tú eres el receptor
+        String sql = "SELECT contenido FROM notificaciones "
+                + "WHERE receptor_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                + "ORDER BY fecha ASC";
+
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, usuarioLogueado);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                // Agregamos cada aviso directamente a la lista visual
+                modeloNotificaciones.addElement(rs.getString("contenido"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error al cargar notificaciones: " + e.getMessage());
+        }
+    }
+
+    private void eliminarContactoDeTodasPartes(int idContactoBD, String nombreContacto, String codigoContactoBD) {
+        try (Connection conn = Conexion.obtenerConexion()) {
+
+            // 1. Obtener TU propio ID numérico en la BD usando tu código (usuarioLogueado)
+            int miId = -1;
+            String sqlMiId = "SELECT id FROM usuarios WHERE usuario = ?";
+            try (PreparedStatement psId = conn.prepareStatement(sqlMiId)) {
+                psId.setString(1, usuarioLogueado);
+                ResultSet rsId = psId.executeQuery();
+                if (rsId.next()) {
+                    miId = rsId.getInt("id");
+                }
+            }
+
+            if (miId == -1) {
+                javax.swing.JOptionPane.showMessageDialog(null, "Error interno: No se pudo identificar tu usuario.");
+                return;
+            }
+
+            // 2. Iniciamos una transacción: esto asegura que si algo falla, no se borre la info a medias
+            conn.setAutoCommit(false);
+
+            // Eliminamos de la tabla CONTACTOS (bidireccional)
+            String delContactos = "DELETE FROM contactos WHERE (usuario_id = ? AND contacto_id = ?) OR (usuario_id = ? AND contacto_id = ?)";
+            try (PreparedStatement ps = conn.prepareStatement(delContactos)) {
+                ps.setInt(1, miId);
+                ps.setInt(2, idContactoBD);
+                ps.setInt(3, idContactoBD);
+                ps.setInt(4, miId);
+                ps.executeUpdate();
+            }
+
+            // Eliminamos de la tabla FAVORITOS
+            String delFavoritos = "DELETE FROM favoritos WHERE (usuario_id = ? AND favorito_id = ?) OR (usuario_id = ? AND favorito_id = ?)";
+            try (PreparedStatement ps = conn.prepareStatement(delFavoritos)) {
+                ps.setInt(1, miId);
+                ps.setInt(2, idContactoBD);
+                ps.setInt(3, idContactoBD);
+                ps.setInt(4, miId);
+                ps.executeUpdate();
+            }
+
+            // Eliminamos de la tabla BLOQUEADOS
+            String delBloqueados = "DELETE FROM bloqueados WHERE (usuario_id = ? AND bloqueado_id = ?) OR (usuario_id = ? AND bloqueado_id = ?)";
+            try (PreparedStatement ps = conn.prepareStatement(delBloqueados)) {
+                ps.setInt(1, miId);
+                ps.setInt(2, idContactoBD);
+                ps.setInt(3, idContactoBD);
+                ps.setInt(4, miId);
+                ps.executeUpdate();
+            }
+
+            // Eliminamos de la tabla MENSAJES (todos los mensajes entre ambos)
+            String delMensajes = "DELETE FROM mensajes WHERE (emisor_id = ? AND receptor_id = ?) OR (emisor_id = ? AND receptor_id = ?)";
+            try (PreparedStatement ps = conn.prepareStatement(delMensajes)) {
+                ps.setInt(1, miId);
+                ps.setInt(2, idContactoBD);
+                ps.setInt(3, idContactoBD);
+                ps.setInt(4, miId);
+                ps.executeUpdate();
+            }
+
+            conn.commit(); // Confirmamos todos los borrados
+            conn.setAutoCommit(true);
+
+            // 3. LIMPIEZA DE LA INTERFAZ VISUAL DEL USUARIO ACTUAL
+            modeloContactos.removeElement(nombreContacto);
+            Contactos.setText("Selecciona un contacto"); // Resetear el label superior
+            pMensajes.removeAll(); // Borrar los mensajes visuales
+            pMensajes.repaint();
+            pMensajes.revalidate();
+
+            /* * Si tus paneles de favoritos/bloqueados tienen los modelos de JList expuestos, 
+         * quítalos visualmente de ahí también. Ejemplo:
+         * modeloFavoritos.removeElement(nombreContacto);
+         * modeloBloqueados.removeElement(nombreContacto);
+             */
+            javax.swing.JOptionPane.showMessageDialog(null, "Contacto y chat eliminados con éxito.");
+
+            // 4. NOTIFICACIÓN AL SERVIDOR PARA EL OTRO USUARIO
+            if (salida != null) {
+                salida.println("ELIMINAR_CONTACTO||" + usuarioLogueado + "||" + codigoContactoBD);
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            javax.swing.JOptionPane.showMessageDialog(null, "Error crítico al intentar eliminar en la base de datos.");
+        }
+    }
+// 1. Método para Guardar/Quitar favoritos en la Base de Datos
+
+    private void actualizarFavoritoBD(String nombreContacto, boolean esFavorito) {
+        String sql = "UPDATE contactos SET es_favorito = ? "
+                + "WHERE usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                + "AND contacto_id = (SELECT id FROM usuarios WHERE usuario = ?)";
+
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setBoolean(1, esFavorito);
+            ps.setString(2, usuarioLogueado);
+            ps.setString(3, nombreContacto);
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            System.err.println("Error al actualizar favorito en BD: " + e.getMessage());
+        }
+    }
+
+    // 2. Método para cargar los favoritos al abrir el programa
+    private void cargarFavoritosDesdeBD() {
+        if (vistaFavoritos == null) {
+            return; // Asume que así llamaste a tu instancia de PanelFavoritos
+        }
+        DefaultListModel<String> modFav = vistaFavoritos.getModeloFavoritos();
+        modFav.clear();
+
+        String sql = "SELECT u.usuario FROM usuarios u "
+                + "JOIN contactos c ON u.id = c.contacto_id "
+                + "WHERE c.usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                + "AND c.es_favorito = 1";
+
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, usuarioLogueado);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                modFav.addElement(rs.getString("usuario"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error al cargar favoritos: " + e.getMessage());
+        }
+    }
+// Método para Guardar/Quitar bloqueados en la Base de Datos
+
+    private void actualizarBloqueadoBD(String nombreContacto, boolean esBloqueado) {
+        String sql = "UPDATE contactos SET es_bloqueado = ? "
+                + "WHERE usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                + "AND contacto_id = (SELECT id FROM usuarios WHERE usuario = ?)";
+
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setBoolean(1, esBloqueado);
+            ps.setString(2, usuarioLogueado);
+            ps.setString(3, nombreContacto);
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            System.err.println("Error al actualizar bloqueado en BD: " + e.getMessage());
+        }
+    }
+
+    // Método para cargar los bloqueados al iniciar
+    private void cargarBloqueadosDesdeBD() {
+        if (vistaBloqueados == null) {
+            return; // Asegúrate de usar el nombre correcto de tu variable
+        }
+        DefaultListModel<String> modBloq = vistaBloqueados.getModeloBloqueados();
+        modBloq.clear();
+
+        String sql = "SELECT u.usuario FROM usuarios u "
+                + "JOIN contactos c ON u.id = c.contacto_id "
+                + "WHERE c.usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                + "AND c.es_bloqueado = 1";
+
+        try (Connection conn = Conexion.obtenerConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, usuarioLogueado);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                modBloq.addElement(rs.getString("usuario"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error al cargar bloqueados: " + e.getMessage());
+        }
+    }
+    // Método para saber si el contacto al que le voy a escribir me tiene bloqueado
+    private boolean meTieneBloqueado(String nombreDestino) {
+        // Buscamos en la lista de contactos del destino, para ver si mi ID está marcado como bloqueado
+        String sql = "SELECT c.es_bloqueado FROM contactos c "
+                   + "WHERE c.usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                   + "AND c.contacto_id = (SELECT id FROM usuarios WHERE usuario = ?)";
+                   
+        try (java.sql.Connection conn = INICIO_SESION.Conexion.obtenerConexion(); 
+             java.sql.PreparedStatement ps = conn.prepareStatement(sql)) {
+            
+            ps.setString(1, nombreDestino); // La persona a la que le quiero enviar (dueño de su lista)
+            ps.setString(2, usuarioLogueado); // Yo (el que intenta enviar)
+            
+            java.sql.ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                return rs.getBoolean("es_bloqueado"); // Retornará true si me tiene bloqueado, false si no
+            }
+        } catch (java.sql.SQLException e) {
+            System.err.println("Error al verificar si me tienen bloqueado: " + e.getMessage());
+        }
+        return false; // Si hay error o no hay registro, asumimos que no estoy bloqueado
+    }
+    /*public static void main(String[] args) {
         new Chat();
-    }
+    }*/
 }
