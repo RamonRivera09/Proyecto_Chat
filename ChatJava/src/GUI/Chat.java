@@ -52,6 +52,7 @@ import javax.swing.DefaultListModel;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.Base64;
+import javax.swing.JColorChooser;
 import javax.swing.JFileChooser;
 
 public class Chat extends JFrame implements ActionListener {
@@ -74,7 +75,7 @@ public class Chat extends JFrame implements ActionListener {
     private JComboBox<String> emojis;
     private JComboBox<String> fuentes;
 
-    private JMenuItem juego, correo, contacto, favoritos, bloqueados;
+    private JMenuItem juego, correo, contacto, favoritos, bloqueados, fondos;
     private JTextField txtBuscar;
     private JButton btnBuscar;
 
@@ -82,6 +83,7 @@ public class Chat extends JFrame implements ActionListener {
     DefaultListModel<String> modeloContactos = new DefaultListModel<>();
     private DefaultListModel<String> modeloNotificaciones = new DefaultListModel<>();
     private JList<String> listaNotificaciones = new JList<>(modeloNotificaciones);
+    private Color fondo;
 
     public Chat(String usuario) {
         this.usuarioLogueado = usuario; // Guardamos el nombre
@@ -249,6 +251,10 @@ public class Chat extends JFrame implements ActionListener {
                 cerrarSesion();
             }
         });
+        fondo=new Color(229, 221, 213);
+        fondos=new JMenuItem("Colores/fondo");
+        fondos.addActionListener(this);
+        Opciones.add(fondos);
         Opciones.addSeparator();
         Opciones.add(itemCerrar);
         MiPerfil.addMouseListener(new MouseAdapter() {
@@ -815,7 +821,7 @@ public class Chat extends JFrame implements ActionListener {
 
     private void mostrarMensajeEnChat(String emisor, String texto, String tipoFuente, boolean esMio) {
         // 1. Crear el panel contenedor de la burbuja
-        pMensajes.setBackground(new Color(229, 221, 213));
+        pMensajes.setBackground(fondo);
         JPanel burbuja = new JPanel();
         burbuja.setLayout(new BoxLayout(burbuja, BoxLayout.Y_AXIS));
 
@@ -1073,6 +1079,7 @@ public class Chat extends JFrame implements ActionListener {
     }
 
     private void cargarHistorialMensajes(String contactoNombre) {
+        pMensajes.setBackground(fondo);
         pMensajes.removeAll();
         String sql = "SELECT m.contenido, u_e.usuario as emisor_nom FROM mensajes m "
                 + "JOIN usuarios u_e ON m.emisor_id = u_e.id "
@@ -1098,6 +1105,18 @@ public class Chat extends JFrame implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
+        if(e.getSource()==fondos){
+            Color nuevoColor = JColorChooser.showDialog(
+                        null, 
+                        "Seleccione un color", 
+                        fondo
+                );
+            if (nuevoColor != null) {
+                    fondo = nuevoColor;
+                    pMensajes.setBackground(fondo);
+                    System.out.println("Color seleccionado: " + fondo);
+                }
+        }
         if (e.getSource() == juego) {
             new FrameJuego();
         }
