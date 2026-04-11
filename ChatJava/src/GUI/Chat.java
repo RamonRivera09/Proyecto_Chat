@@ -357,7 +357,29 @@ public class Chat extends JFrame implements ActionListener {
         JButton Zumbido = new JButton("Zumbido");
         Zumbido.addActionListener(e -> {
             // 1. Obtenemos el nombre del contacto que está arriba en la pantalla de mensajes
-            String receptorNombre = Contactos.getText();
+            String receptorNombre = Contactos.getText(); // El nombre de la persona con la que tienes abierto el chat
+    
+    // Si la lista de bloqueados contiene a esta persona, no lo dejamos hacer nada// El nombre de la persona en el chat abierto
+
+        // 1er Candado: ¿Yo lo tengo bloqueado a él?
+        if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(receptorNombre)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "Tienes a " + receptorNombre + " bloqueado.\nDesbloquéalo primero para interactuar.", 
+                "Acción Denegada", 
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+            return; // Corta la ejecución
+        }
+
+        // 2do Candado: ¿Él me tiene bloqueado a mí? (AQUÍ ESTÁ LA MAGIA QUE PEDISTE)
+        if (meTieneBloqueado(receptorNombre)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "No puedes mandar ni mensajes, ni zumbidos ni archivos a este usuario.", 
+                "Usuario Bloqueado", 
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            return; // Corta la ejecución, no se envía nada al servidor
+        }
+        
+        // ... A partir de aquí abajo sigue tu código normal de envío de mensajes ...
 
             // 2. Validamos que realmente haya un chat abierto
             if (receptorNombre.equals("Selecciona un contacto") || receptorNombre.isEmpty()) {
@@ -381,7 +403,27 @@ public class Chat extends JFrame implements ActionListener {
         JButton Archivos = new JButton("Archivos");
         Archivos.addActionListener(e -> {
             // 1. Identificamos al usuario de la ventana de chat actual
-            String receptorNombre = Contactos.getText();
+            String receptorNombre = Contactos.getText(); // El nombre de la persona en el chat abierto
+
+        // 1er Candado: ¿Yo lo tengo bloqueado a él?
+        if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(receptorNombre)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "Tienes a " + receptorNombre + " bloqueado.\nDesbloquéalo primero para interactuar.", 
+                "Acción Denegada", 
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+            return; // Corta la ejecución
+        }
+
+        // 2do Candado: ¿Él me tiene bloqueado a mí? (AQUÍ ESTÁ LA MAGIA QUE PEDISTE)
+        if (meTieneBloqueado(receptorNombre)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "No puedes mandar ni mensajes, ni zumbidos ni archivos a este usuario.", 
+                "Usuario Bloqueado", 
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            return; // Corta la ejecución, no se envía nada al servidor
+        }
+        
+        // ... A partir de aquí abajo sigue tu código normal de envío de mensajes ...
             if (receptorNombre.equals("Selecciona un contacto") || receptorNombre.isEmpty()) {
                 javax.swing.JOptionPane.showMessageDialog(this, "Selecciona un contacto primero.");
                 return;
@@ -441,7 +483,27 @@ public class Chat extends JFrame implements ActionListener {
         // ENVIAR MENSAJE
         Enviar.addActionListener(e -> {
             String texto = Mensaje.getText().trim();
-            String receptorNom = Contactos.getText();
+            String receptorNom = Contactos.getText();// El nombre de la persona en el chat abierto
+
+        // 1er Candado: ¿Yo lo tengo bloqueado a él?
+        if (vistaBloqueados != null && vistaBloqueados.getModeloBloqueados().contains(receptorNom)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "Tienes a " + receptorNom + " bloqueado.\nDesbloquéalo primero para interactuar.", 
+                "Acción Denegada", 
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+            return; // Corta la ejecución
+        }
+
+        // 2do Candado: ¿Él me tiene bloqueado a mí? (AQUÍ ESTÁ LA MAGIA QUE PEDISTE)
+        if (meTieneBloqueado(receptorNom)) {
+            javax.swing.JOptionPane.showMessageDialog(null, 
+                "No puedes mandar ni mensajes, ni zumbidos ni archivos a este usuario.", 
+                "Usuario Bloqueado", 
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            return; // Corta la ejecución, no se envía nada al servidor
+        }
+        
+        // ... A partir de aquí abajo sigue tu código normal de envío de mensajes ...
 
             // IMPORTANTE: Obtener el valor seleccionado del JComboBox
             String fuenteSeleccionada = (String) fuentes.getSelectedItem();
@@ -1349,6 +1411,28 @@ public class Chat extends JFrame implements ActionListener {
         } catch (SQLException e) {
             System.err.println("Error al cargar bloqueados: " + e.getMessage());
         }
+    }
+    // Método para saber si el contacto al que le voy a escribir me tiene bloqueado
+    private boolean meTieneBloqueado(String nombreDestino) {
+        // Buscamos en la lista de contactos del destino, para ver si mi ID está marcado como bloqueado
+        String sql = "SELECT c.es_bloqueado FROM contactos c "
+                   + "WHERE c.usuario_id = (SELECT id FROM usuarios WHERE usuario = ?) "
+                   + "AND c.contacto_id = (SELECT id FROM usuarios WHERE usuario = ?)";
+                   
+        try (java.sql.Connection conn = INICIO_SESION.Conexion.obtenerConexion(); 
+             java.sql.PreparedStatement ps = conn.prepareStatement(sql)) {
+            
+            ps.setString(1, nombreDestino); // La persona a la que le quiero enviar (dueño de su lista)
+            ps.setString(2, usuarioLogueado); // Yo (el que intenta enviar)
+            
+            java.sql.ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                return rs.getBoolean("es_bloqueado"); // Retornará true si me tiene bloqueado, false si no
+            }
+        } catch (java.sql.SQLException e) {
+            System.err.println("Error al verificar si me tienen bloqueado: " + e.getMessage());
+        }
+        return false; // Si hay error o no hay registro, asumimos que no estoy bloqueado
     }
     /*public static void main(String[] args) {
         new Chat();

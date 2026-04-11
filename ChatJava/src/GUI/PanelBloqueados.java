@@ -11,7 +11,7 @@ public class PanelBloqueados extends JPanel implements ActionListener{
     private JTextField txtBuscar;
     private DefaultListModel<String> modeloBloqueados;
     private JList<String> listaBloqueados;
-    private JButton Buscar;
+    private JButton BuscarBloq;
 
     public PanelBloqueados(ActionListener accionVolver) {
         setLayout(new BorderLayout());
@@ -46,9 +46,9 @@ public class PanelBloqueados extends JPanel implements ActionListener{
         
         txtBuscar = new JTextField(30);
         btnDesbloquear = new JButton("Desbloquear Selección");
-        Buscar=new JButton("Buscar");
-        Buscar.addActionListener(this);
-        pAbajo.add(Buscar);
+        BuscarBloq=new JButton("Buscar");
+        BuscarBloq.addActionListener(this);
+        pAbajo.add(BuscarBloq);
         pAbajo.add(txtBuscar);
         pAbajo.add(btnDesbloquear);
 
@@ -72,30 +72,39 @@ public class PanelBloqueados extends JPanel implements ActionListener{
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        if(e.getSource()==Buscar){
+        
+        // Comparamos usando .equals() o e.getActionCommand() por si el objeto se reinició
+        if (e.getSource() == BuscarBloq || e.getActionCommand().equals("Buscar")) {
+            
             String busqueda = txtBuscar.getText().trim().toLowerCase();
 
             if (busqueda.isEmpty()) {
-                JOptionPane.showMessageDialog(null, "Escribe un nombre");
+                JOptionPane.showMessageDialog(null, "Escribe un nombre para buscar.");
                 return;
             }
 
             ListModel<String> modelo = listaBloqueados.getModel();
             boolean encontrado = false;
 
+            // Recorremos la lista para buscar al contacto
             for (int i = 0; i < modelo.getSize(); i++) {
                 String contacto = modelo.getElementAt(i).toLowerCase();
 
                 if (contacto.contains(busqueda)) {
                     listaBloqueados.setSelectedIndex(i);
                     listaBloqueados.ensureIndexIsVisible(i);
+                    
+                    // IMPORTANTE: Le devolvemos el foco a la lista para que la selección no se vea gris
+                    listaBloqueados.requestFocus(); 
+                    
                     encontrado = true;
                     break;
                 }
             }
 
+            // Si terminó de revisar toda la lista y no lo encontró
             if (!encontrado) {
-                JOptionPane.showMessageDialog(null, "Contacto no registrado");
+                JOptionPane.showMessageDialog(null, "El contacto '" + busqueda + "' no está registrado en bloqueados.");
             }
         }
     }

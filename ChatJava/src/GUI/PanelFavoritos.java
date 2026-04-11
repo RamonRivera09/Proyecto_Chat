@@ -102,4 +102,4 @@ public class PanelFavoritos extends JPanel implements ActionListener{
         }
     }
     
-} // <-- Esta es la última llave de tu clase PanelFavoritos
+} 
