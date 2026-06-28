@@ -9,8 +9,8 @@ public class Conexion {
 
     // Aquí definimos las credenciales de tu base de datos
     private static final String URL = "jdbc:mysql://localhost:3306/chat_app";
-    private static final String USUARIO = "root";
-    private static final String CONTRASENA = "MDmama09"; // Pon tu contraseña si usas una
+    private static final String USUARIO = "";
+    private static final String CONTRASENA = ""; // Pon tu contraseña si usas una
 
     // Este método es el que llamaremos desde otras ventanas
     public static Connection obtenerConexion() {
